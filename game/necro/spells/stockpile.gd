@@ -31,11 +31,11 @@ func cycle() -> void:
 
 
 func cost_text() -> String:
-	return NecroText.t("spell.command_cost", "order")
+	return NecroText.t("necro_command_cost", "order")
 
 
 func detail() -> String:
-	return NecroText.t("stockpile." + String(current_kind()), {&"gibs": "Flesh pit", &"bones": "Ossuary", &"corpses": "Corpse pile"}.get(current_kind(), String(current_kind())))
+	return NecroText.t("stockpile_" + String(current_kind()), {&"gibs": "Flesh pit", &"bones": "Ossuary", &"corpses": "Corpse pile"}.get(current_kind(), String(current_kind())))
 
 
 ## Most of it must be open air: you dig the hollow first, then paint it.
@@ -52,7 +52,7 @@ func rect_ok(r: Rect2i) -> bool:
 
 func commit(r: Rect2i) -> void:
 	if not rect_ok(r):
-		Narrative.say(NecroText.t("necro.stockpile_needs_hollow", "Dig the hollow out first, boss. Then we paint it."), &"concerned")
+		Narrative.say(NecroText.t("necro_stockpile_needs_hollow", "Dig the hollow out first, boss. Then we paint it."), &"concerned")
 		return
 	var k := current_kind()
 	zones.append({"rect": r, "kind": k})

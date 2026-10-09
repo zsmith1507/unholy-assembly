@@ -27,6 +27,9 @@ func run(t) -> void:
 	var noise := [0]
 	var on_noise := func(_at, _l, src): if src == "dig": noise[0] += 1
 	Events.noise_made.connect(on_noise)
+	var casts := []
+	var on_cast := func(id, _at): casts.append(id)
+	Events.spell_cast.connect(on_cast)
 	var target := n.global_position + Vector2(50, 30)
 	var probe := Rect2i(Sim.to_cell(target) - Vector2i(12, 12), Vector2i(24, 24))
 	var before := U.count_solid(probe)
@@ -40,6 +43,8 @@ func run(t) -> void:
 	var spent := mana0 - GameState.mana
 	t.check(absf(spent - 0.1) < 0.01, "dig spends 0.1 souls' worth per second (spent %.3f)" % spent)
 	t.check(noise[0] > 0, "dig makes noise")
+	t.check(casts == [&"dig"], "one Events.spell_cast per channel (%s)" % [casts])
+	Events.spell_cast.disconnect(on_cast)
 	Events.noise_made.disconnect(on_noise)
 
 	# --- no mana, no spell

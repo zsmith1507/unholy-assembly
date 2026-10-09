@@ -20,7 +20,7 @@ func _init() -> void:
 
 
 func cost_text() -> String:
-	return NecroText.t("spell.command_cost", "order") if COMMAND.cost <= 0.0 else "%.2f" % COMMAND.cost
+	return NecroText.t("necro_command_cost", "order") if COMMAND.cost <= 0.0 else "%.2f" % COMMAND.cost
 
 
 func rect_ok(r: Rect2i) -> bool:

@@ -31,13 +31,14 @@ var _t := 0
 
 
 func _init() -> void:
+	announce_channel = true
 	id = &"harvest"
 	title = "Harvest"
 	color = Color(0.5, 0.95, 0.85)
 
 
 func cost_text() -> String:
-	return NecroText.t("spell.cost_per_s", "{c} souls/s", {"c": "%.2f" % HARV.cost})
+	return NecroText.t("necro_cost_per_s", "{c} souls/s", {"c": "%.2f" % HARV.cost})
 
 
 func on_deselect() -> void:

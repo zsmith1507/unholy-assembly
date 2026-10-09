@@ -1,7 +1,7 @@
 class_name NecroText
 extends RefCounted
 ## Player-facing words go through Narrative (the Eyegor department writes them). Until a key has words,
-## Narrative.line() hands the key back, so we show a plain fallback instead of "spell.dig".
+## Narrative.line() hands the key back, so we show a plain fallback instead of "spell_dig".
 
 
 static func t(key: String, fallback: String, args: Dictionary = {}) -> String:

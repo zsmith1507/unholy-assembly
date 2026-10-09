@@ -15,6 +15,7 @@ var id: StringName = &"spell"
 var title := "Spell" ## fallback name; Narrative key "spell.<id>" overrides it
 var color := TEAL
 var channelling := false ## true on ticks the spell is actually working (the necromancer shows his cast pose)
+var announce_channel := false ## channelled spells: emit Events.spell_cast each time a channel starts
 
 var _glow: Node2D
 var _parts: Array = [] ## small FX particles: {p, v, life, max, col, glow, size}
@@ -66,7 +67,7 @@ func detail() -> String:
 
 
 func display_name() -> String:
-	return NecroText.t("spell." + String(id), title)
+	return NecroText.t("spell_" + String(id), title)
 
 
 # ---------------------------------------------------------------- FX particles

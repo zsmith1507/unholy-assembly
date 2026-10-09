@@ -12,7 +12,7 @@ func get_box() -> Rect2:
 
 
 func interact_hint() -> String:
-	return NecroText.t("heart.refill_hint", "Refill mana ({s} souls stored)", {"s": "%.1f" % GameState.souls})
+	return NecroText.t("hint_refill_hint", "Refill mana ({s} souls stored)", {"s": "%.1f" % GameState.souls})
 
 
 func interact(_by: Node2D) -> void:

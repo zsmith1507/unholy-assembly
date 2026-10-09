@@ -128,6 +128,18 @@ func _attach_light() -> void:
 			_hand_light.position = AIM.hand
 
 
+## Move to the run's spawn point (feet), nudged up out of the ground if it is buried.
+func settle_at_spawn(info: Dictionary) -> void:
+	var p: Vector2 = info.get("necro_spawn", position)
+	if Sim.world != null:
+		for i in 200:
+			if not _box_blocked(p):
+				break
+			p.y -= Sim.CELL
+	position = p
+	velocity = Vector2.ZERO
+
+
 # ---------------------------------------------------------------- hooks for the HUD
 
 ## The spell list: [{id, name, cost_text, color}], in hotkey order.
@@ -302,6 +314,8 @@ func _physics_process(_delta: float) -> void:
 	if alt and not _was_alt:
 		spell.alt_pressed()
 	spell.tick(aim, cast, cast and not _was_cast, (not cast) and _was_cast)
+	if spell.channelling and not casting and spell.announce_channel:
+		Events.spell_cast.emit(spell.id, aim)
 	casting = spell.channelling
 	_was_cast = cast
 	_was_alt = alt
@@ -412,7 +426,7 @@ func warn_no_mana() -> void:
 	if _ticks - _mana_warned < MANA_WARN_EVERY:
 		return
 	_mana_warned = _ticks
-	Narrative.say(NecroText.t("necro.no_mana", "Mana's run dry, boss. A visit to the heart will top you up."), &"concerned")
+	Narrative.say(NecroText.t("necro_no_mana", "Mana's run dry, boss. A visit to the heart will top you up."), &"concerned")
 
 
 # ---------------------------------------------------------------- drawing: aim reticle and hand glow

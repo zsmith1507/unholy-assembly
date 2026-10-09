@@ -76,8 +76,8 @@ func cost_text() -> String:
 func detail() -> String:
 	var k := current_kind()
 	if k == &"":
-		return NecroText.t("build.nothing", "Nothing to build")
-	var s := NecroText.t("build." + String(k), String(k).capitalize())
+		return NecroText.t("necro_build_nothing", "Nothing to build")
+	var s := NecroText.t("build_" + String(k), String(k).capitalize())
 	if _show and not ghost_ok and ghost_reason != "":
 		s += " - " + ghost_reason
 	return s
@@ -94,10 +94,10 @@ func _cost_string(k: StringName) -> String:
 	var c := _cost(k)
 	var parts := []
 	if c.get("mana", 0.0) > 0.0:
-		parts.append(NecroText.t("spell.cost_mana", "{c} mana", {"c": "%.2f" % c.mana}))
+		parts.append(NecroText.t("necro_cost_mana", "{c} mana", {"c": "%.2f" % c.mana}))
 	if c.get("souls", 0.0) > 0.0:
-		parts.append(NecroText.t("spell.cost_souls", "{c} souls", {"c": "%.2g" % c.souls}))
-	return ", ".join(parts) if not parts.is_empty() else NecroText.t("spell.free", "free")
+		parts.append(NecroText.t("necro_cost_souls", "{c} souls", {"c": "%.2g" % c.souls}))
+	return ", ".join(parts) if not parts.is_empty() else NecroText.t("necro_free", "free")
 
 
 func footprint(k: StringName) -> Vector2:
@@ -146,21 +146,21 @@ func _check(k: StringName, at: Vector2) -> bool:
 	if k == &"":
 		return false
 	if at.distance_to(necro.global_position) > BUILD.range_px:
-		ghost_reason = NecroText.t("build.too_far", "too far")
+		ghost_reason = NecroText.t("necro_build_too_far", "too far")
 		return false
 	var b := builder()
 	if b == null:
-		ghost_reason = NecroText.t("build.no_builder", "no lair yet")
+		ghost_reason = NecroText.t("necro_build_no_builder", "no lair yet")
 		return false
 	if b.has_method("can_place") and not b.can_place(k, at):
-		ghost_reason = NecroText.t("build.blocked", "won't fit here")
+		ghost_reason = NecroText.t("necro_build_blocked", "won't fit here")
 		return false
 	var c := _cost(k)
 	if GameState.mana + 0.0001 < float(c.get("mana", 0.0)):
-		ghost_reason = NecroText.t("build.need_mana", "not enough mana")
+		ghost_reason = NecroText.t("necro_build_need_mana", "not enough mana")
 		return false
 	if GameState.souls + 0.0001 < float(c.get("souls", 0.0)):
-		ghost_reason = NecroText.t("build.need_souls", "not enough souls")
+		ghost_reason = NecroText.t("necro_build_need_souls", "not enough souls")
 		return false
 	return true
 
@@ -168,7 +168,7 @@ func _check(k: StringName, at: Vector2) -> bool:
 ## Place a structure through the builder and pay for it. Returns the new node or null.
 func try_place(k: StringName, at: Vector2) -> Node2D:
 	if not _check(k, at):
-		if ghost_reason == NecroText.t("build.need_mana", "not enough mana"):
+		if ghost_reason == NecroText.t("necro_build_need_mana", "not enough mana"):
 			necro.warn_no_mana()
 		return null
 	var b := builder()

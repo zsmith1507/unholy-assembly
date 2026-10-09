@@ -31,13 +31,14 @@ var _t := 0
 
 
 func _init() -> void:
+	announce_channel = true
 	id = &"siphon"
 	title = "Siphon"
 	color = Color(0.75, 0.25, 0.35)
 
 
 func cost_text() -> String:
-	return NecroText.t("spell.siphon_cost", "gains mana")
+	return NecroText.t("necro_siphon_cost", "gains mana")
 
 
 func on_deselect() -> void:
