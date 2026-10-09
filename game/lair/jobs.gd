@@ -12,7 +12,7 @@ const HARVEST := &"harvest" ## collect a body or part from the world
 ## Tuning for the board itself.
 const BOARD := {
 	"dig_chunk_cells": 14, # a big dig is split into columns this wide so several ghouls can share it
-	"avoid_msec": 8000, # a ghoul that gave up on a job won't take it again for this long
+	"avoid_ticks": 480, # a ghoul that gave up on a job won't take it again for this many physics ticks (8 s)
 	"distance_weight": 0.001, # among equal priorities, nearer jobs win (priority 1 beats 1000 px of walking)
 }
 
@@ -46,7 +46,7 @@ func claim_next(worker: Node, allowed_types: Array = []) -> Dictionary:
 	var has_pos := worker is Node2D
 	if has_pos:
 		wpos = (worker as Node2D).global_position
-	var now := Time.get_ticks_msec()
+	var now := Engine.get_physics_frames()
 	for job in _jobs.values():
 		if job.claimed_by != null:
 			continue
@@ -98,7 +98,7 @@ func give_up(id: int, worker: Node) -> void:
 	var job: Dictionary = _jobs[id]
 	job.claimed_by = null
 	var avoid: Dictionary = job.get("avoid", {})
-	avoid[worker.get_instance_id()] = Time.get_ticks_msec() + int(BOARD.avoid_msec)
+	avoid[worker.get_instance_id()] = Engine.get_physics_frames() + int(BOARD.avoid_ticks)
 	job["avoid"] = avoid
 
 

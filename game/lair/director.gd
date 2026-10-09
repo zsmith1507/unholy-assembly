@@ -25,7 +25,7 @@ var layers := {} ## name -> Node for "buildings", "items", "actors", "fx"
 var stockpiles: Array = [] ## {rect: Rect2i (cells), kind: StringName}
 var morale: float = MORALE.start
 var stage := 0 ## 0 fine, 1 complained, 2 slowdown, 3 strike
-var _post_t := 0.0
+var _post_t := -INF
 
 
 func _ready() -> void:
@@ -72,7 +72,8 @@ func _in_any_stockpile(p: Vector2) -> bool:
 
 ## Post haul jobs for loose items that have somewhere to go and no job yet. Cheap; ghouls call it.
 func post_haul_jobs() -> void:
-	var now := Time.get_ticks_msec() / 1000.0
+	# game time, not wall time: headless runs go faster than real time
+	var now := float(Engine.get_physics_frames()) / float(Engine.physics_ticks_per_second)
 	if now - _post_t < float(LOGISTICS.post_every_s):
 		return
 	_post_t = now
