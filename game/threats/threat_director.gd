@@ -496,7 +496,7 @@ func _listener_near(p: Vector2) -> bool:
 	if town_near(p, r) >= 0:
 		return true
 	for h in get_tree().get_nodes_in_group("humans"):
-		if h is Node2D and is_instance_valid(h) and not bool(h.get("dead")):
+		if h is Node2D and is_instance_valid(h) and not _is_dead(h):
 			if (h as Node2D).global_position.distance_to(p) <= r:
 				return true
 	return false
@@ -798,7 +798,7 @@ func _grave_count(p: Vector2) -> int:
 # ================================================================ sightings and reports
 
 func _on_sighting(witness: Node2D, of: Node2D) -> void:
-	if witness == null or not is_instance_valid(witness) or bool(witness.get("dead")):
+	if witness == null or not is_instance_valid(witness) or _is_dead(witness):
 		return
 	var key := "%d:%d" % [witness.get_instance_id(), of.get_instance_id() if of != null else 0]
 	if _report_seen.has(key) and time - float(_report_seen[key]) < WITNESS.repeat_s:
@@ -822,7 +822,7 @@ func _on_sighting(witness: Node2D, of: Node2D) -> void:
 func _check_reports() -> void:
 	for r in pending_reports.duplicate():
 		var wv = r.witness
-		if wv == null or not is_instance_valid(wv) or bool(wv.get("dead")):
+		if wv == null or not is_instance_valid(wv) or _is_dead(wv):
 			pending_reports.erase(r)
 			note("report", "a witness to %s never made it home (report stopped)" % r.what)
 			report_stopped.emit(r.what)
@@ -975,3 +975,12 @@ func _mat(name: String) -> int:
 	if ClassDB.class_has_integer_constant("SandWorld", "M_" + name):
 		return ClassDB.class_get_integer_constant("SandWorld", "M_" + name)
 	return -1
+
+
+func _is_dead(n: Object) -> bool:
+	if n == null or not is_instance_valid(n):
+		return true
+	var d = n.get("dead")
+	if d == null and n.has_method("is_dead"):
+		d = n.call("is_dead")
+	return d == true
