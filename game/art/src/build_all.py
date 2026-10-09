@@ -1,6 +1,7 @@
 """Regenerate every sprite: cd game/art/src && python3 build_all.py  (deterministic output)."""
 import humans
 import beasts
+import parts
 from pix import write_sprite
 
 SPRITES = {
@@ -19,6 +20,8 @@ SPRITES = {
 if __name__ == "__main__":
     import sys
     only = sys.argv[1:]
+    if not only or "parts" in only:
+        parts.build()
     for name, (fn, speeds) in SPRITES.items():
         if only and name not in only:
             continue
