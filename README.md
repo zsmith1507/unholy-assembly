@@ -6,6 +6,12 @@ A 2D side-scrolling factory sim with a gothic, gallows-humour streak. You play a
 
 Browser prototypes used to work out the simulation before porting it to Godot. Each is a single self-contained HTML file: open it in any modern browser. Fonts load from Google Fonts; everything else is inline.
 
+Play them online (GitHub Pages, from `main`):
+- [Proving Ground](https://zsmith1507.github.io/unholy-assembly/prototypes/proving-ground.html)
+- [Charnel Pit](https://zsmith1507.github.io/unholy-assembly/prototypes/charnel-pit.html)
+
+`node tools/smoke-test.js` boots each prototype headlessly and runs ten seconds of game time to catch errors.
+
 ### `prototypes/charnel-pit.html`: the physics sandbox
 
 Paint materials into a crypt pit and watch them interact.
