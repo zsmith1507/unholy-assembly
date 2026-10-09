@@ -17,7 +17,8 @@ func _ready() -> void:
 	Events.advisor_line.connect(_remember)
 
 
-## Ask Eyegor to say something. mood: &"chipper", &"concerned", &"proud", &"memo".
+## Ask Eyegor to say something. mood: &"chipper", &"concerned", &"proud", &"memo", or &"announce"
+## (a short, flat status report in the Dungeon Keeper style; use announce() for the ann_* keys).
 func say(text: String, mood: StringName = &"chipper") -> void:
 	Events.advisor_line.emit(text, mood)
 
@@ -25,6 +26,12 @@ func say(text: String, mood: StringName = &"chipper") -> void:
 ## Say a line by key: Narrative.say_line("first_soul") or say_line("memo_food", {}, &"memo").
 func say_line(key: String, args: Dictionary = {}, mood: StringName = &"chipper") -> void:
 	say(line(key, args), mood)
+
+
+## A short status announcement by key, without the ann_ prefix: Narrative.announce("ghoul_hungry").
+func announce(key: String, args: Dictionary = {}) -> void:
+	var k := key if key.begins_with("ann_") else "ann_" + key
+	say(line(k, args), &"announce")
 
 
 ## A line by key, e.g. line("heart_placed"). Unknown keys return the key itself so gaps are visible.
