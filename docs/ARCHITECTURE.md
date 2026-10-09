@@ -68,6 +68,24 @@ An installer is a script that `extends RefCounted` with `func install(main: Main
 | `Narrative` | `eyegor/narrative.gd` | Eyegor | `say(text, mood)`, `line(key)`, `describe_item(kind)`. All player-facing text goes through here. |
 | `Threats` | `threats/threat_director.gd` | Suspicion | Converts noise, sightings and missing bodies into Suspicion; spawns patrols. |
 
+## Hooks between departments
+
+These are the only places departments call each other directly. Everything else goes through `Events`, `GameState` and `Jobs`. Implement your side exactly as written; if a hook needs to change, ask on `#floor`.
+
+| Hook | Provided by | Used by | Shape |
+| --- | --- | --- | --- |
+| Lair builder | Lair: a node in group `lair_builder`, added by `lair/install.gd` | Necromancer's build spell | `can_place(kind: StringName, at: Vector2) -> bool`, `place(kind, at) -> Node2D` (null if refused), `cost(kind) -> Dictionary` (e.g. `{"mana": 0.2}`), `kinds() -> Array[StringName]` (`&"heart"`, `&"grinder"`, `&"stitching_table"`, `&"altar"`, `&"spike_trap"`) |
+| Interactables | Lair (heart, machines, altar) and anyone else | Necromancer's interact key | Node in group `interactable` with `interact(by: Node2D) -> void` and `interact_hint() -> String`; the necromancer uses the nearest one within 24 px |
+| Pullables | Bodies and Souls (corpses, parts, critters, living humans), Lair (items) | Necromancer's Harvest spell | Node in group `pullable` with `apply_pull(force: Vector2) -> void` (pixels per tick², applied for one tick). Living humans resist by their `fear` and `brace`. |
+| Siphonable | Bodies and Souls (corpses, parts) | Necromancer's Siphon spell | Node in group `siphonable` with `siphon(amount: float) -> float` returning mana gained in souls' worth; the thing turns to ash as it empties. Blood on the ground is siphoned straight from the sim. |
+| Flesh spawner | Bodies and Souls: node in group `flesh_spawner` | Threats (patrols), Lair (testing) | `spawn_human(kind: StringName, at: Vector2) -> Actor` (`&"farmer"`, `&"villager"`), `spawn_critter(kind, at) -> Actor` (`&"rabbit"`, `&"crow"`, `&"deer"`), `spawn_soul_orb(at: Vector2, amount: float, source: String) -> Node2D` |
+| Human orders | Bodies and Souls (human actors) | Threats | `set_route(points: PackedVector2Array)`, `investigate(at: Vector2)`, `set_mode(mode: StringName)` (`&"home"`, `&"work"`, `&"patrol"`, `&"flee"`, `&"attack"`), `fear: float` 0–1, signal `noticed(what: Node2D)` |
+| Spell list | Necromancer (node in group `necro`) | HUD | `get_spells() -> Array` of `{id, name, cost_text, color}`, `get_selected_spell() -> StringName`; emits `Events.spell_selected` |
+| Settlements | World: node in group `settlements` | Threats, Bodies and Souls | `homes() -> Array[Dictionary]`, `resident_died(home_id: int)`, `home_at(pos: Vector2) -> Dictionary`; homes decay when empty and slowly refill |
+| Lighting | Art: node in group `lighting` | Lair, Necromancer, World | `add_light(node: Node2D, color: Color, radius_px: float, energy: float) -> PointLight2D` so everyone's lights share one look |
+
+Souls rule (from the design doc): a human's soul is collected only if the necromancer is within `SOULS.witness_radius` of the death, or the death is inside the heart's range, where the orb drifts home by itself. Bodies and Souls implements this in its soul orb.
+
 ## Shared base classes (`game/core/`)
 
 - **`GridBody`** (`extends Node2D`): a box that moves through the sand world. Set `box_size`, `velocity`; call `move_tick()` each physics tick. Gives `on_floor`, `submerged`, `hit_wall`. Steps up small ledges, swims in liquid.
