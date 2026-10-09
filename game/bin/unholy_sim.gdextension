@@ -1,0 +1,14 @@
+[configuration]
+
+entry_symbol = "unholy_sim_init"
+compatibility_minimum = "4.5"
+reloadable = true
+
+[libraries]
+
+linux.debug.x86_64 = "res://bin/libunholy_sim.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://bin/libunholy_sim.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://bin/libunholy_sim.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://bin/libunholy_sim.windows.template_release.x86_64.dll"
+macos.debug = "res://bin/libunholy_sim.macos.template_debug.framework"
+macos.release = "res://bin/libunholy_sim.macos.template_release.framework"

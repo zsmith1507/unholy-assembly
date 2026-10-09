@@ -1,0 +1,86 @@
+name: Build pixel sim
+
+# Compiles the C++ falling-sand extension (native/) for Windows, Linux and macOS
+# and commits the libraries to game/bin/, so the Godot project opens anywhere without a compiler.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/**"
+      - ".github/workflows/build-sim.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-sim
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+          - platform: linux
+            os: ubuntu-22.04
+          - platform: macos
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install scons==4.8.1
+      - name: Cache godot-cpp objects
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/godot-cpp/bin
+            native/godot-cpp/gen
+            native/.scons-cache
+          key: godot-cpp-${{ matrix.platform }}-${{ hashFiles('.gitmodules', 'native/SConstruct') }}-${{ github.sha }}
+          restore-keys: godot-cpp-${{ matrix.platform }}-${{ hashFiles('.gitmodules', 'native/SConstruct') }}-
+      - name: Build debug and release
+        working-directory: native
+        shell: bash
+        run: |
+          scons platform=${{ matrix.platform }} target=template_debug debug_symbols=no -j4
+          scons platform=${{ matrix.platform }} target=template_release -j4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.platform }}
+          path: |
+            game/bin/libunholy_sim.*
+          if-no-files-found: error
+
+  commit:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Copy libraries into game/bin
+        run: |
+          for d in artifacts/bin-*; do cp -r "$d"/* game/bin/; done
+          ls -la game/bin
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f game/bin/libunholy_sim.*
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "Build pixel sim libraries for ${GITHUB_SHA::7} [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            sleep 5
+          done

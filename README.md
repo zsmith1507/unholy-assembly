@@ -2,6 +2,12 @@
 
 A 2D side-scrolling factory sim with a gothic, gallows-humour streak. You play a necromancer harvesting a battlefield for body parts to build zombies for an ever-growing war on the forces of "good". The diggable world is a Noita-style falling-sand simulation; the game itself will be built in Godot.
 
+## Playing the game
+
+Install [Godot 4.7](https://godotengine.org/download), open the `game/` folder, and press Play. The pixel simulation is a C++ extension; GitHub Actions builds it for Windows, Linux and macOS and commits the libraries to `game/bin/`.
+
+The game is being built department by department (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)); the design is in [docs/design-doc.md](docs/design-doc.md).
+
 ## Prototypes
 
 Browser prototypes used to work out the simulation before porting it to Godot. Each is a single self-contained HTML file: open it in any modern browser. Fonts load from Google Fonts; everything else is inline.

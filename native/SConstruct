@@ -1,0 +1,29 @@
+#!/usr/bin/env python
+# Builds the Unholy Assembly pixel simulation as a Godot GDExtension.
+#   cd native && scons target=template_debug     (Linux, for local testing)
+#   cd native && scons target=template_release platform=windows
+# The library lands in game/bin/, next to unholy_sim.gdextension.
+
+env = SConscript("godot-cpp/SConstruct")
+
+# bin_dir=... builds somewhere else first, so a running game is never handed a half-written library.
+bin_dir = ARGUMENTS.get("bin_dir", "../game/bin")
+
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+
+if env["platform"] == "macos":
+    library = env.SharedLibrary(
+        bin_dir + "/libunholy_sim.{}.{}.framework/libunholy_sim.{}.{}".format(
+            env["platform"], env["target"], env["platform"], env["target"]
+        ),
+        source=sources,
+    )
+else:
+    library = env.SharedLibrary(
+        bin_dir + "/libunholy_sim{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+        source=sources,
+    )
+
+env.NoCache(library)
+Default(library)

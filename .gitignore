@@ -23,3 +23,15 @@ mono_crash.*.json
 *.exe
 # Uncomment if your project does not version PCK files as runtime dependencies.
 # *.pck
+
+# Native build outputs. Libraries in game/bin/ are built and committed by GitHub Actions
+# (.github/workflows/build-sim.yml); local builds stay out of git.
+native/**/*.o
+native/**/*.os
+native/**/*.obj
+native/.sconsign*.dblite
+native/.scons-cache/
+game/bin/libunholy_sim.*
+game/bin/*.lib
+game/bin/*.exp
+game/bin/*.pdb
