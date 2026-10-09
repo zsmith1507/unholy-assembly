@@ -6,6 +6,11 @@ extends Node2D
 ## Orbs that `fades` (a minion died far from home) vanish if he doesn't reach them in time.
 ## Owned by Bodies and Souls.
 
+## The souls rule (design doc): a death's soul is his only if he is this close, or it is in the heart's range.
+const SOULS := {
+	"witness_radius": 160.0, ## px
+}
+
 const ORB := {
 	"drift_speed": 0.9, ## px per tick toward the heart
 	"follow_speed": 2.2, ## px per tick toward the necromancer once claimed
@@ -66,7 +71,8 @@ func _deposit() -> void:
 
 
 func _draw() -> void:
-	var r := 2.0 + clampf(amount, 0.1, 3.0) * 2.0
+	var worth := amount / float(GameState.ECON.fragments_per_soul) if fragment else amount
+	var r := 1.5 + clampf(worth, 0.1, 3.0) * 2.5
 	var c: Color = ORB.color
 	var pulse := 0.5 + 0.5 * sin(_t)
 	draw_circle(Vector2.ZERO, r * 2.2, Color(c.r, c.g, c.b, 0.12 + 0.08 * pulse))
@@ -82,6 +88,12 @@ static func _necro() -> Node2D:
 		if n is Node2D:
 			return n
 	return null
+
+
+## True if the necromancer stands within `radius` px of `at`.
+static func necro_within(at: Vector2, radius: float) -> bool:
+	var n := _necro()
+	return n != null and n.global_position.distance_to(at) <= radius
 
 
 static func _facing(n: Node) -> int:

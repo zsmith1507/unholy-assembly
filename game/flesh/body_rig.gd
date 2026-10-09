@@ -121,6 +121,40 @@ static func _limb(o: Vector2, ang: float, l: float) -> Vector2:
 	return o + Vector2(sin(ang), cos(ang)) * l
 
 
+## A body laid out in a coffin: on its back, arms folded on the chest, knees drawn up so it fits a short box.
+## Spans about 30 px. Graveyard corpses start like this.
+static func grave_pose(center: Vector2, facing: int = 1) -> Dictionary:
+	var f := float(facing)
+	var hip := center + Vector2(f * 8.0, 1)
+	var neck := hip - Vector2(f * RIG.torso, 0)
+	return {
+		"hip": hip,
+		"neck": neck,
+		"top": neck - Vector2(f * RIG.head * 0.9, 1),
+		"handB": neck + Vector2(f * RIG.arm * 0.9, -1),
+		"handF": neck + Vector2(f * RIG.arm * 0.9, 0),
+		"footB": hip - Vector2(f * RIG.leg * 0.95, -1),
+		"footF": hip - Vector2(f * RIG.leg * 0.95, -2),
+	}
+
+
+## One verlet point moving from `from` to `to` through the sand world. Solid ground blocks; it slides
+## along walls. A point already stuck inside the earth (buried, or sand settled on it) can only move up
+## or sideways, never sink: that is how Harvest draws a body up through grave dirt.
+static func collide_point(from: Vector2, to: Vector2) -> Vector2:
+	if Sim.world == null or not Sim.solid_at(to):
+		return to
+	if Sim.solid_at(from):
+		return to if to.y <= from.y + 0.01 else Vector2(to.x, from.y)
+	var tx := Vector2(to.x, from.y)
+	if not Sim.solid_at(tx):
+		return tx
+	var ty := Vector2(from.x, to.y)
+	if not Sim.solid_at(ty):
+		return ty
+	return from
+
+
 ## A body lying on its back with its feet toward `facing`, centred on `center` (for graves and tests).
 static func lying_pose(center: Vector2, facing: int = 1) -> Dictionary:
 	var f := float(facing)

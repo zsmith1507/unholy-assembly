@@ -1,9 +1,12 @@
 class_name Corpse
 extends Item
 ## A dead human: a six-part ragdoll (verlet points on BodyRig's skeleton) that flops into the sand world.
-## Harvest (apply_pull) strains its joints; light parts tear off first: arms, then the head, legs, torso.
+## Harvest (apply_pull) drags it toward the necromancer's hand. When the body is held back (stuck in a
+## coffin, wedged in a shaft) its joints strain and the light parts tear off first: arms, then the head,
+## then the legs, until only the torso is left, which becomes a torso part.
 ## Each tear leaves a stump that pumps blood into the sim while the blood timer lasts.
 ## Siphon drinks its blood (rich mana) then its flesh (thin mana); empty, it crumbles to ash.
+## Graveyard corpses start `interred`: still, hidden, odourless, until Harvest first touches them.
 ## Owned by Bodies and Souls.
 
 const CORPSE := {
@@ -12,8 +15,12 @@ const CORPSE := {
 	"ground_friction": 0.7, ## sideways velocity kept per tick on the ground
 	"iterations": 4, ## constraint passes per tick
 	"blood_seconds": 90.0, ## the blood timer: a fresh body's blood is gone (dried, drained) after this
-	"joint_strength": 26.0, ## strain a weight-1 joint takes before it tears (strain += pull / weight per tick)
-	"old_joint_strength": 14.0, ## graveyard bodies come apart easily
+	"pull_scale": 0.85, ## share of Harvest's pull a whole body feels (a body drags in a bit slower than a part)
+	"flail": 0.6, ## extra pull on each limb's far end, divided by its weight (light limbs fly ahead)
+	"joint_strength": 22.0, ## a joint tears when strain reaches this × weight; strain grows by pull ÷ weight per tick
+	"old_joint_strength": 11.0, ## graveyard bodies come apart easily
+	"stuck_speed": 1.0, ## px per tick: a pulled body moving slower than this is being held back and strains
+	"free_strain": 0.15, ## share of strain gathered while it is flying freely toward the hand
 	"strain_relax": 0.97, ## strain kept per tick when nobody is pulling
 	"pump_rate": 0.55, ## chance per tick that a fresh wound squirts a cell of blood (times its strength)
 	"pump_beat": 7.0, ## heartbeat-ish pulse, radians per second (the heart has stopped; the gore has not)
@@ -21,12 +28,16 @@ const CORPSE := {
 	"tear_spurt": 14, ## cells of blood flung when a part tears free
 	"blood_mana": 0.35, ## souls' worth from a full body's blood
 	"flesh_mana": 0.12, ## souls' worth from the meat once the blood is gone
+	"old_flesh": 0.6, ## graveyard bodies have this much flesh left
 	"old_tint": Color(0.62, 0.66, 0.58),
 	"ash_cells": 22,
+	"sleep_speed": 0.03, ## px per tick: slower than this for sleep_ticks and the ragdoll stops simulating
+	"sleep_ticks": 45,
 }
 
 var look := "villager"
 var fresh := true ## false for graveyard bodies: no blood, no soul
+var interred := false ## a graveyard body still in its coffin: no physics, not drawn, doesn't smell
 var blood := 1.0 ## 0..1 of the body's blood left in it
 var flesh := 1.0 ## 0..1 left for Siphon once the blood is gone
 var pts := {} ## point name -> world position
@@ -34,10 +45,12 @@ var prev := {} ## point name -> world position last tick
 var attached := {} ## seg key -> true while still on the body
 var strain := {} ## seg key -> accumulated strain
 var wounds: Array = [] ## [{pt: String, strength: float}]
+var asleep := false
 var _pulled := false
 var _rig: BodyRig
 var _t := 0.0
 var _last_pos := Vector2.ZERO
+var _still := 0
 
 
 func _init() -> void:
@@ -50,7 +63,7 @@ func setup(look_name: String, pose: Dictionary, vel := Vector2.ZERO, is_fresh :=
 	look = look_name
 	fresh = is_fresh
 	blood = 1.0 if fresh else 0.0
-	flesh = 1.0 if fresh else 0.6
+	flesh = 1.0 if fresh else CORPSE.old_flesh
 	for k in BodyRig.PT_NAMES:
 		pts[k] = pose[k]
 		prev[k] = pose[k] - vel
@@ -63,11 +76,21 @@ func setup(look_name: String, pose: Dictionary, vel := Vector2.ZERO, is_fresh :=
 		wounds.append({"pt": "neck", "strength": 0.6})
 
 
+## A graveyard body in its coffin at `center` (pixels). Call before adding to the tree.
+func setup_grave(look_name: String, center: Vector2) -> void:
+	setup(look_name, BodyRig.grave_pose(center, 1 if randf() < 0.5 else -1), Vector2.ZERO, false)
+	interred = true
+
+
 func _ready() -> void:
 	super._ready()
 	add_to_group(&"pullable")
 	add_to_group(&"siphonable")
 	add_to_group(&"corpses")
+	if interred:
+		add_to_group(&"grave_corpses")
+		remove_from_group(&"item_corpse") # nobody can smell or haul it until it is dug up
+		visible = false
 	_rig = BodyRig.new()
 	_rig.setup(look)
 	if not fresh:
@@ -77,23 +100,42 @@ func _ready() -> void:
 	_redraw_rig()
 
 
+## The first touch of Harvest wakes a graveyard body: it shows, smells and can be hauled from now on.
+func exhume() -> void:
+	if not interred:
+		return
+	interred = false
+	visible = true
+	remove_from_group(&"grave_corpses")
+	add_to_group(&"item_corpse")
+	asleep = false
+
+
 func _physics_process(delta: float) -> void:
 	_t += delta
+	if interred:
+		return
 	if carrier != null:
 		var shift := global_position - _last_pos
 		for k in pts:
 			pts[k] += shift
 			prev[k] = pts[k]
-	else:
+		asleep = false
+	elif not asleep:
 		_step()
 		global_position = pts["hip"]
+		velocity = pts["hip"] - prev["hip"]
+		_check_sleep()
+	elif Engine.get_physics_frames() % 20 == 0 and not Sim.solid_at(pts["hip"] + Vector2(0, 3)):
+		asleep = false # the ground under it went away
 	_last_pos = global_position
 	if not _pulled:
 		for k in strain:
 			strain[k] *= CORPSE.strain_relax
 	_pulled = false
 	_bleed(delta)
-	_redraw_rig()
+	if not asleep or carrier != null:
+		_redraw_rig()
 
 
 # ---------------------------------------------------------------- ragdoll
@@ -113,7 +155,7 @@ func _step() -> void:
 		var v: Vector2 = (p - prev[k]) * CORPSE.damping
 		v.y += CORPSE.gravity
 		prev[k] = p
-		pts[k] = _collide(p, p + v)
+		pts[k] = BodyRig.collide_point(p, p + v)
 	for i in CORPSE.iterations:
 		for seg in BodyRig.SEGS:
 			if not attached.get(seg[0], false):
@@ -127,20 +169,8 @@ func _step() -> void:
 			prev[k] = Vector2(p.x - (p.x - px) * CORPSE.ground_friction, prev[k].y)
 
 
-func _collide(from: Vector2, to: Vector2) -> Vector2:
-	if Sim.world == null or not Sim.solid_at(to):
-		return to
-	var tx := Vector2(to.x, from.y)
-	if not Sim.solid_at(tx):
-		return tx
-	var ty := Vector2(from.x, to.y)
-	if not Sim.solid_at(ty):
-		return ty
-	if Sim.solid_at(from):
-		return from + Vector2(0, -1) # buried: work upward out of the dirt
-	return from
-
-
+## Keep two points `length` apart. A point may not be pushed into the ground, but one already stuck
+## in it may be pulled out by the rest of the body.
 func _constrain(a: String, b: String, length: float) -> void:
 	var pa: Vector2 = pts[a]
 	var pb: Vector2 = pts[b]
@@ -151,8 +181,27 @@ func _constrain(a: String, b: String, length: float) -> void:
 	var diff := (l - length) / l * 0.5
 	var na := pa + d * diff
 	var nb := pb - d * diff
-	pts[a] = na if not Sim.solid_at(na) else pa
-	pts[b] = nb if not Sim.solid_at(nb) else pb
+	if not Sim.solid_at(na) or Sim.solid_at(pa):
+		pts[a] = na
+	if not Sim.solid_at(nb) or Sim.solid_at(pb):
+		pts[b] = nb
+
+
+func _check_sleep() -> void:
+	var fastest := 0.0
+	for k in _live_points():
+		fastest = maxf(fastest, (pts[k] - prev[k]).length())
+	_still = _still + 1 if fastest < CORPSE.sleep_speed else 0
+	if _still >= CORPSE.sleep_ticks:
+		asleep = true
+		_still = 0
+		for k in pts:
+			prev[k] = pts[k]
+
+
+func wake() -> void:
+	asleep = false
+	_still = 0
 
 
 func _redraw_rig() -> void:
@@ -170,6 +219,22 @@ func body_velocity() -> Vector2:
 	return pts["hip"] - prev["hip"]
 
 
+## Item.drop for a ragdoll: move every point so the hip lands at `at`.
+func drop(at: Vector2, vel: Vector2 = Vector2.ZERO) -> void:
+	carrier = null
+	reserved_by = null
+	exhume()
+	var shift := at - pts.get("hip", global_position)
+	for k in pts:
+		pts[k] += shift
+		prev[k] = pts[k] - vel
+	global_position = at
+	_last_pos = at
+	velocity = vel
+	wake()
+	_redraw_rig()
+
+
 # ---------------------------------------------------------------- blood
 
 func _bleed(delta: float) -> void:
@@ -177,87 +242,124 @@ func _bleed(delta: float) -> void:
 		return
 	blood = maxf(0.0, blood - delta / CORPSE.blood_seconds)
 	data["fresh"] = blood > 0.0
+	if carrier != null:
+		return
 	var beat := 0.5 + 0.5 * sin(_t * CORPSE.pump_beat)
 	for w in wounds:
 		if randf() < CORPSE.pump_rate * w.strength * beat * blood:
 			var at: Vector2 = pts.get(w.pt, global_position)
 			var dir := Vector2(randf_range(-0.6, 0.6), -1.0).normalized() * CORPSE.spurt_speed * (0.5 + beat)
-			Sim.spill_px(at, SandWorld.M_BLOOD, 1, dir)
+			Sim.spill_px(at + Vector2(0, -2), SandWorld.M_BLOOD, 1, dir)
 	for w in wounds:
 		w.strength = maxf(0.08, w.strength * 0.9995)
 
 
 # ---------------------------------------------------------------- Harvest (pullable)
 
-## Harvest pulls with `force` (px per tick², for this tick). Light parts move most and tear first.
+## Harvest pulls with `force` (px per tick², for this tick). The body slides toward the hand; light limbs
+## fly ahead. Held back, its joints strain and tear in weight order: arms, head, legs.
 func apply_pull(force: Vector2) -> void:
 	if carrier != null:
 		return
+	exhume()
+	wake()
 	_pulled = true
+	var body_force := force * CORPSE.pull_scale
+	for k in _live_points():
+		pts[k] += body_force
 	var f := force.length()
+	var stuck := body_velocity().length() < CORPSE.stuck_speed
+	var gain := f * (1.0 if stuck else CORPSE.free_strain)
 	var limit: float = CORPSE.joint_strength if fresh else CORPSE.old_joint_strength
+	var weakest := ""
+	var weakest_left := INF
 	for seg in BodyRig.SEGS:
 		var k: String = seg[0]
-		if not attached.get(k, false):
+		if k == "torso" or not attached.get(k, false):
 			continue
 		var w: float = BodyRig.WEIGHT[k]
-		pts[seg[2]] += force / w
-		strain[k] += f / w
-		if strain[k] >= limit:
-			tear(k)
-			return # one tear per tick reads better
-	# the whole body slides along
-	for k in _live_points():
-		pts[k] += force * 0.5
+		pts[seg[2]] += force * CORPSE.flail / w
+		strain[k] += gain / w
+		var left: float = limit * w - strain[k]
+		if left < weakest_left:
+			weakest_left = left
+			weakest = k
+	if weakest != "" and weakest_left <= 0.0:
+		tear(weakest) # one tear per tick reads better
 
 
-## Rip one segment off as a part Item. Tearing the torso turns what is left into a torso part.
+## Rip one limb or the head off as a part Item. When nothing is left but the torso, the corpse becomes
+## a torso part. Returns the new part.
 func tear(k: String) -> Node2D:
 	if not attached.get(k, false):
 		return null
+	if k == "torso":
+		for other in attached.keys():
+			if other != "torso" and attached[other]:
+				_tear_one(other)
+		return _become_torso()
+	var part := _tear_one(k)
+	var left := attached.keys().filter(func(x): return attached[x] and x != "torso")
+	if left.is_empty():
+		_become_torso()
+	return part
+
+
+func _tear_one(k: String) -> Node2D:
 	var seg: Array = []
 	for s in BodyRig.SEGS:
 		if s[0] == k:
 			seg = s
 	var a: Vector2 = pts[seg[1]]
 	var b: Vector2 = pts[seg[2]]
-	if k == "torso":
-		for other in attached.keys():
-			if other != "torso" and attached[other]:
-				tear(other)
 	attached[k] = false
+	strain[k] = 0.0
 	data["parts"] = attached.keys().filter(func(x): return attached[x])
+	var bleeding := fresh and blood > 0.0
+	var part := _spawn_part(BodyRig.PART[k], a, b, (b - prev[seg[2]]) * 1.2)
+	if bleeding:
+		Sim.spill_px(a, SandWorld.M_BLOOD, int(CORPSE.tear_spurt * blood), (b - a).normalized() * 1.5)
+		wounds.append({"pt": seg[1], "strength": 1.0})
+	Events.noise_made.emit(global_position, 0.15, "flesh_tear")
+	return part
+
+
+func _become_torso() -> Node2D:
+	attached["torso"] = false
+	var part := _spawn_part("torso", pts["hip"], pts["neck"], body_velocity())
+	queue_free()
+	return part
+
+
+func _spawn_part(part_name: String, a: Vector2, b: Vector2, vel: Vector2) -> BodyPart:
 	var part := BodyPart.new()
-	part.setup(look, BodyRig.PART[k], a, b, (b - prev[seg[2]]) * 1.2, fresh and blood > 0.0, blood)
+	part.setup(look, part_name, a, b, vel, fresh and blood > 0.0, blood)
 	if not fresh:
 		part.make_old()
 	var parent := get_parent()
 	if parent != null:
 		parent.add_child(part)
-	if fresh and blood > 0.0:
-		Sim.spill_px(a, SandWorld.M_BLOOD, int(CORPSE.tear_spurt * blood), (b - a).normalized() * 1.5)
-		wounds.append({"pt": seg[1], "strength": 1.0})
-	Events.noise_made.emit(global_position, 0.15, "flesh_tear")
-	if k == "torso":
-		queue_free()
 	return part
 
 
 # ---------------------------------------------------------------- Siphon
 
-## Drain up to `amount` (0..1 of the body) and return mana in souls' worth. Empty bodies crumble to ash.
+## Siphon asks for `amount` souls' worth of mana; returns what it got (never more). Blood goes first
+## (rich), then the flesh (thin). Empty bodies crumble to ash.
 func siphon(amount: float) -> float:
+	if interred or amount <= 0.0:
+		return 0.0
 	var got := 0.0
 	if blood > 0.0:
-		var take := minf(amount, blood)
+		var take := minf(amount / CORPSE.blood_mana, blood)
 		blood -= take
 		got += take * CORPSE.blood_mana
-		amount -= take
-	if amount > 0.0 and flesh > 0.0:
-		var take2 := minf(amount, flesh)
+	if got < amount and flesh > 0.0:
+		var take2 := minf((amount - got) / CORPSE.flesh_mana, flesh)
 		flesh -= take2
 		got += take2 * CORPSE.flesh_mana
-	var dry := clampf(flesh, 0.0, 1.0)
+	data["fresh"] = blood > 0.0
+	var dry := clampf(flesh / (1.0 if fresh else CORPSE.old_flesh), 0.0, 1.0)
 	if _rig:
 		_rig.modulate = Color(0.45, 0.42, 0.4).lerp(Color.WHITE if fresh else CORPSE.old_tint, dry)
 	if flesh <= 0.0:
