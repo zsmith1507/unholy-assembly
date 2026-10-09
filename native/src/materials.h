@@ -1,6 +1,7 @@
 // Material table for the Unholy Assembly pixel simulation.
 // IDs 0-21 match prototypes/proving-ground.html so tuning carries over; the rest are new for the game world.
-// Add a material: give it an ID below MAT_COUNT, then a row in materials.cpp. Nothing else needs to change.
+// Add a material: give it an ID below MAT_COUNT, then a row in materials.cpp. Behaviour tuning (friction, stains,
+// burning, soaking) lives in tuning.h under the prototype's block names.
 #pragma once
 #include <cstdint>
 
@@ -56,16 +57,35 @@ struct MatDef {
 	Kind kind = K_EMPTY;
 	float density = 0.0f; // heavier sinks through lighter liquids and powders
 	float hardness = 0.0f; // how much Dig power it takes to wear away one cell (0 = cannot be dug)
-	float flammability = 0.0f; // chance per tick to catch when touching fire (0 = never)
-	uint8_t dispersion = 0; // liquids: cells of sideways flow per tick
-	float viscosity = 0.0f; // liquids: chance to sit still a tick
+	uint8_t dispersion = 0; // liquids: cells of sideways flow per tick (prototype `disp`)
+	float viscosity = 0.0f; // liquids: chance to sit still a tick (prototype `visc`)
+	float splash = 0.0f; // liquids: splashiness 0..1 (prototype `spl`)
+	float rise = 0.0f; // gases: chance per tick to drift up
+	float gas_alpha = 0.0f; // gases: how opaque
 	uint16_t life_min = 0, life_max = 0; // gas and fire lifetime in ticks
 	uint32_t colors[4] = { 0, 0, 0, 0 }; // 0xRRGGBB variations, picked per cell
-	bool emissive = false; // glows in the dark (feeds the light map)
+	uint32_t glow = 0; // 0xRRGGBB light this material gives off by itself (feeds the glow map); 0 = none
 	bool solid_for_actors = false; // characters stand on it and collide with it
+	bool movable = false; // anything that isn't fixed ground
+
+	// filled from tuning.h
+	float fric = 0.08f, skid = 0.0f, slump = 1.0f; // powders
+	float soak = 0.0f, absorb = 0.0f; // stains: how deep they soak in; liquids: how fast this ground drinks
+	uint8_t loose = 0; // what it crumbles into when it breaks off (0 = stays itself)
+	bool stains = false; // liquids that leave stains
+	float st_pen = 0, st_p = 0;
+	uint16_t st_ticks = 0;
+	bool st_glow = false, st_cleans = false;
+	uint8_t st_lut[64][4] = {}; // stain colour by age: r, g, b, alpha
+	bool fueled = false; // burns (keeps its material while its fuel runs down)
+	float ign = 0, bheat = 0, flamep = 0, air_ign = 0, air_burn = 0;
+	uint16_t fuel0 = 0, fuel1 = 0;
+	uint8_t burn_depth = 1;
+	float spread = 0, cond = 0, cool = 0; // heat
 };
 
 void init_materials();
 const MatDef &mat_def(int id);
+float mix_rate(int a, int b); // chance per tick two liquids blend (0 = never)
 
 } // namespace unholy
