@@ -9,8 +9,8 @@ const GEN := {
 	"hill_amp": 22.0, ## cells of rolling hill height either way
 	"hill_freq": 0.006,
 	"grass_depth": 2,
-	"earth_depth": 46, ## packed earth below the grass, before clay starts
-	"clay_depth": 34, ## clay band thickness
+	"earth_depth": 80, ## packed earth below the grass, before clay starts
+	"clay_depth": 60, ## clay band thickness
 	"bedrock_rows": 5,
 	"dirt_patches": 60, ## loose soil blobs in the earth layer
 	"caves": 5,
@@ -119,28 +119,32 @@ func _dirt_patches() -> void:
 	# Stone and clay lenses for texture.
 	for i in 40:
 		var x := rng.randi_range(4, width - 5)
-		var y := heights[x] + rng.randi_range(30, 90)
+		var y := heights[x] + rng.randi_range(60, 160)
 		w.paint_circle(x, y, rng.randi_range(3, 6), SandWorld.M_STONE if i % 2 else SandWorld.M_CLAY, false)
 
 
 func _caves() -> void:
 	for i in GEN.caves:
 		var x := float(rng.randi_range(100, width - 100))
-		var y := float(heights[int(x)] + rng.randi_range(110, 260))
-		y = minf(y, height - 30)
+		var y := float(heights[int(x)] + rng.randi_range(170, 330))
+		y = minf(y, height - 40)
 		var ang := rng.randf_range(-0.6, 0.6) + (PI if rng.randf() < 0.5 else 0.0)
-		for s in rng.randi_range(18, 32):
-			w.paint_circle(int(x), int(y), rng.randi_range(5, 9), SandWorld.M_EMPTY, false)
-			ang += rng.randf_range(-0.4, 0.4)
-			x = clampf(x + cos(ang) * 6.0, 20, width - 20)
-			y = clampf(y + sin(ang) * 3.0, heights[int(x)] + 90, height - 25)
+		var r := rng.randf_range(9.0, 14.0)
+		for s in rng.randi_range(14, 24):
+			w.paint_circle(int(x), int(y), int(r), SandWorld.M_EMPTY, false)
+			# Rubble on the cave floor.
+			w.paint_circle(int(x), int(y + r) , 2, SandWorld.M_RUBBLE, false)
+			r = clampf(r + rng.randf_range(-2.0, 2.0), 7.0, 16.0)
+			ang += rng.randf_range(-0.5, 0.5)
+			x = clampf(x + cos(ang) * 7.0, 30, width - 30)
+			y = clampf(y + sin(ang) * 3.0, heights[int(x)] + 150, height - 35)
 
 
 func _liquid_pockets() -> void:
 	var mats := [SandWorld.M_ICHOR, SandWorld.M_BLOOD, SandWorld.M_MUD]
 	for i in GEN.liquid_pockets:
 		var x := rng.randi_range(450, width - 450)
-		var y := mini(heights[x] + rng.randi_range(150, 300), height - 30)
+		var y := mini(heights[x] + rng.randi_range(200, 360), height - 30)
 		_basin(x, y, rng.randi_range(5, 8), mats[i % mats.size()])
 
 
