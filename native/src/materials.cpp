@@ -5,7 +5,7 @@
 
 namespace unholy {
 
-static MatDef g_defs[MAT_COUNT];
+MatDef g_defs[MAT_COUNT];
 static float g_mix[MAT_COUNT][MAT_COUNT];
 static bool g_ready = false;
 
@@ -59,24 +59,24 @@ void init_materials() {
 	liquid(BLOOD, 8, 0.0f, 0.8f);
 	g_defs[HOLY] = def("Holy Water", K_LIQUID, 1.0f, 0, 0x5d7a96, 0x577390, 0x6886a2, 0x52708b);
 	liquid(HOLY, 11, 0.0f, 1.0f);
-	g_defs[HOLY].glow = 0x0c2038;
+	g_defs[HOLY].glow = 0x06101c; // glow colours are the prototype's (G_HOLY etc.)
 	g_defs[ICHOR] = def("Ichor", K_LIQUID, 1.3f, 0, 0x6f9a1e, 0x628a19, 0x7dab25, 0x587d15);
 	liquid(ICHOR, 3, 0.35f, 0.18f);
-	g_defs[ICHOR].glow = 0x44a00c;
+	g_defs[ICHOR].glow = 0x225006;
 	g_defs[TALLOW] = def("Tallow", K_LIQUID, 0.9f, 0, 0xc9b37a, 0xbea86f, 0xd4bf86, 0xb49d64);
 	liquid(TALLOW, 6, 0.08f, 0.55f);
 
 	g_defs[FIRE] = def("Fire", K_FIRE, -0.5f, 0, 0xe0602a, 0xf4a03a, 0xffd166, 0xa8331f);
 	g_defs[FIRE].life_min = 20;
 	g_defs[FIRE].life_max = 60;
-	g_defs[FIRE].glow = 0xff963c;
+	g_defs[FIRE].glow = 0xff9632;
 	g_defs[SMOKE] = def("Smoke", K_GAS, -3, 0, 0x3a3638, 0x343033, 0x403c3e, 0x2f2b2d);
 	gas(SMOKE, 0.7f, 0.55f, 60, 140);
 	g_defs[STEAM] = def("Steam", K_GAS, -2, 0, 0xb8c4cc, 0xaebac2, 0xc2ced6, 0xa4b0b8);
 	gas(STEAM, 0.85f, 0.4f, 70, 160);
 	g_defs[MIASMA] = def("Miasma", K_GAS, -1, 0, 0x8a9a3a, 0x7f8f33, 0x95a541, 0x748429);
 	gas(MIASMA, 0.3f, 0.5f, 400, 800);
-	g_defs[MIASMA].glow = 0x344408;
+	g_defs[MIASMA].glow = 0x1a2204;
 	g_defs[MUD] = def("Mud", K_POWDER, 2.6f, 0.5f, 0x2f2219, 0x29201a, 0x36281d, 0x241a14);
 	g_defs[SPOUT] = def("Spout", K_STATIC, 99, 0, 0x1f1c20, 0x1f1c20, 0x1f1c20, 0x1f1c20);
 	g_defs[EMBER] = def("Ember", K_POWDER, 1.4f, 0.2f, 0xc4471c, 0xa8331f, 0xe0602a, 0x7a2414);

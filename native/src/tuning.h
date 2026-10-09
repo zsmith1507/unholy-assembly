@@ -106,9 +106,21 @@ struct FireDef {
 	int burn_depth;
 	float air_ign, air_burn;
 };
-constexpr float CATCH_SCALE = 0.25f; // chance per tick a flame lights touching fuel: CATCH_SCALE / (1 + ign)^2 (wood ~0.4%, tallow ~1.6%)
-constexpr float FUEL_FLAME = 0.08f; // burning fuel throws a flame into the air above this often
-constexpr float EMBER_LEAVE = 0.35f; // share of burnt-out timber/flesh cells that leave a glowing ember
+// What burning things leave behind and shed while they burn (prototype updBurning).
+struct BurnTune {
+	float quench = 0.35f; // chance per tick holy water or blood touching a burning cell puts it out
+	float timber_ember = 0.30f, timber_ash = 0.30f, timber_smoke = 0.20f; // burnt-out wood/plank: ember, ash, smoke (rest: gone)
+	float flesh_ash = 0.12f, flesh_smoke = 0.38f; // burnt-out flesh/gibs
+	float ember_ash = 0.60f; // a spent ember leaves ash this often
+	float other_smoke = 0.35f; // anything else leaves smoke this often
+	float timber_drop_loose = 0.015f, timber_drop = 0.005f; // burning wood over open air drops off as an ember (barely attached / attached)
+	float ember_pop = 0.0025f; // chance per tick a burning timber cell spits an ember into the air
+	float flesh_drip = 0.004f; // chance per tick burning flesh renders out a drop of tallow
+	float smoke = 0.01f; // chance per tick a burning cell puffs smoke above it
+	float flame_heat = 5.0f; // a flame heats the air it is in by this much per tick
+	float flame_rise = 0.75f; // chance per tick a flame licks upward
+};
+constexpr BurnTune BURN{};
 constexpr FireDef FIRE[] = {
 	{ WOOD, 7, 900, 1500, 3.2f, 0.09f, 1, 0, 0 }, // coffin wood: catches slowly, burns ~20 s, sheds embers
 	{ FLESH, 5, 300, 520, 3.4f, 0.07f, 1, 0, 0 },
@@ -130,7 +142,6 @@ struct HeatTune {
 	// share lost per tick
 	float cool_static = 0.012f, cool_powder = 0.02f, cool_liquid = 0.1f, cool_air = 0.045f, cool_tallow = 0.03f;
 	float up = 0.5f, side = 0.18f, down = 0.14f; // where spread heat goes
-	float flame = 5.0f; // a flame heats the air it is in by this much per tick
 	float miasma_flash = 1.5f; // miasma this hot goes up in a flash
 	float ichor_boil = 12.0f; // ichor this hot boils off into miasma
 	float holy_boil = 22.0f; // holy water this hot turns to steam
@@ -161,6 +172,56 @@ struct DigTune {
 	float flesh_tallow = 0.10f; // ... and this to tallow
 };
 constexpr DigTune DIG{};
+
+// What digging leaves behind (prototype crumble): most dug ground just vanishes, a little falls as loose grains.
+struct CrumbleTune {
+	float earth_dirt = 0.08f; // packed earth: a little loose dirt (more would choke the tunnel)
+	float stone_rubble = 0.40f;
+	float bone_shards = 0.30f;
+	float wood_ash = 0.25f;
+	float clay_dirt = 0.10f;
+	float brick_rubble = 0.40f;
+};
+constexpr CrumbleTune CRUMBLE{};
+
+// ---------------------------------------------------------------- reactions
+struct ReactTune {
+	float blood_dirt_mud = 0.005f; // blood touching grave dirt turns it to mud
+	float ichor_flesh_miasma = 0.02f; // ichor rots flesh into miasma ...
+	float ichor_spent = 0.15f; // ... and is used up doing it this often
+	float ichor_holy = 0.30f; // ichor and holy water annihilate into steam
+	float steam_condense = 0.20f; // steam that runs out of life rains back as holy water this often
+	float sink_slow = 0.45f; // a slowed powder grain only sinks through liquid on some ticks
+};
+constexpr ReactTune REACT{};
+
+// ---------------------------------------------------------------- airborne droplets and grains
+struct ParticleTune {
+	float gravity = 0.32f; // matches liquid fall
+	float drag = 0.985f; // sideways speed kept per tick
+	int max = 8000;
+	int land_search = 12; // how far a landing droplet looks for room
+};
+constexpr ParticleTune PART{};
+
+// ---------------------------------------------------------------- explosions (explode())
+struct BlastTune {
+	float carve = 4.0f; // a cell goes if its hardness is below force * carve * (1 - dist/r)
+	float debris = 0.25f; // share of carved cells thrown as debris
+	float debris_speed = 0.6f; // debris speed: force * this / distance
+	float liquid_speed = 0.5f; // liquids inside the blast are thrown, not destroyed
+	float heat = 30.0f; // heat dumped at the centre (ignites anything flammable nearby)
+	float rim_fire = 0.3f; // chance an outer-ring cell becomes a flame
+	float smoke = 0.2f;
+};
+constexpr BlastTune BLAST{};
+
+// ---------------------------------------------------------------- crush events (take_crush_events)
+struct CrushTune {
+	float force_per = 0.01f; // force = falling speed (cells/tick) * cells in the chunk * this
+	int max_events = 256; // events kept if nobody collects them
+};
+constexpr CrushTune CRUSH{};
 
 // ---------------------------------------------------------------- shading (render_region)
 // Ground gets a lit rim where it meets open air above, a shadow on undersides (tunnel ceilings, overhangs) and grows

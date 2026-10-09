@@ -86,6 +86,8 @@ struct MatDef {
 
 void init_materials();
 const MatDef &mat_def(int id);
+extern MatDef g_defs[MAT_COUNT];
+inline const MatDef &md(int id) { return g_defs[id]; } // no bounds check: ids in the grid are always < MAT_COUNT
 float mix_rate(int a, int b); // chance per tick two liquids blend (0 = never)
 
 } // namespace unholy
