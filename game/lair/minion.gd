@@ -6,7 +6,7 @@ extends Actor
 ## Outside the heart's range they lose health; dying out there drops a soul orb (Bodies and Souls' spawner).
 
 const GHOUL := {
-	"speed": 0.9, # pixels per tick
+	"speed": 1.2, # pixels per tick (72 px a second, a brisk shamble)
 	"size": Vector2(18, 52),
 	"hp": 60.0,
 	"dig_power": 0.35, # wear per tick on the cells it digs
@@ -17,7 +17,8 @@ const GHOUL := {
 	"noise": 0.08,
 	"decay_hp_per_s": 2.0, # outside the heart
 	"repath_s": 1.5,
-	"stuck_s": 6.0, # give up on a job after this long without progress
+	"stuck_s": 6.0, # give up on a job after this long without getting closer or digging anything
+	"progress_px": 6.0, # getting this much closer to where it's walking counts as progress
 	"priorities": [&"dig", &"haul"], # the work tab: earlier wins
 	"work_speed_slowdown": 0.5, # morale slowdown multiplier
 }
@@ -35,6 +36,7 @@ var _repath := 0.0
 var _stuck := 0.0
 var _noise_t := 0.0
 var _goal := Vector2.INF
+var _best_d := INF ## closest it has got to the current walk target
 var _sprite: AnimatedSprite2D
 
 
@@ -237,6 +239,12 @@ func _drop_carry() -> void:
 
 func _walk_to(target: Vector2, speed: float) -> void:
 	_repath -= get_physics_process_delta_time()
+	var dist := global_position.distance_to(target)
+	if _goal.distance_to(target) > 16.0:
+		_best_d = INF
+	if dist < _best_d - float(GHOUL.progress_px):
+		_best_d = dist
+		_stuck = 0.0
 	if _path.is_empty() or _repath <= 0.0 or _goal.distance_to(target) > 16.0:
 		_repath = float(GHOUL.repath_s)
 		_goal = target

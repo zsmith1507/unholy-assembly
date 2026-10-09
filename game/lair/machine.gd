@@ -85,6 +85,14 @@ func wants(item_kind: StringName) -> int:
 	return 0
 
 
+## How many more of `item_kind` the next batch still lacks (hauls that complete a batch go first).
+func missing(item_kind: StringName) -> int:
+	for r in spec.get("recipes", []):
+		if r["in"].has(item_kind):
+			return maxi(0, int(r["in"][item_kind]) - int(hopper.get(item_kind, 0)))
+	return 0
+
+
 ## Take an item into the hopper. Returns true if it was accepted (the item is freed).
 func accept(item: Node) -> bool:
 	var k := Lair.item_kind(item)

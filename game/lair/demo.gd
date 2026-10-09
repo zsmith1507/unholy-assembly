@@ -31,16 +31,16 @@ func _ready() -> void:
 	var fy := float(DEMO.floor * Sim.CELL)
 	GameState.souls = 3.0
 	builder.place(&"heart", Vector2(360, fy))
-	builder.place(&"grinder", Vector2(160, fy))
+	builder.place(&"grinder", Vector2(240, fy))
 	builder.place(&"stitching_table", Vector2(470, fy))
-	altar = builder.place(&"altar", Vector2(580, fy))
-	builder.place(&"spike_trap", Vector2(250, fy))
+	altar = builder.place(&"altar", Vector2(560, fy))
+	builder.place(&"spike_trap", Vector2(140, fy))
 	for i in 2:
 		var g := LairMinion.make(&"ghoul")
 		add_child(g)
 		g.global_position = Vector2(300 + i * 40, fy)
-	Jobs.mark_dig(Rect2i(DEMO.w - 40, DEMO.floor - 20, 16, 20))
-	Events.stockpile_designated.emit(Rect2i(26, DEMO.floor - 12, 30, 12), &"ossuary")
+	Jobs.mark_dig(Rect2i(DEMO.w - 20, DEMO.floor - 30, 12, 30)) # into the right-hand wall
+	Events.stockpile_designated.emit(Rect2i(60, DEMO.floor - 12, 24, 12), &"ossuary")
 	var cam := Camera2D.new()
 	cam.position = Vector2(DEMO.w * Sim.CELL * 0.5, (DEMO.ground + 55) * Sim.CELL)
 	add_child(cam)
@@ -51,7 +51,7 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	if _drops < 2 and _t > 0.3 + _drops * 2.0:
 		_drops += 1
-		Lair.spawn_item(get_tree(), &"corpse", Vector2(100 + _drops * 60, (DEMO.ground + 25) * Sim.CELL), self)
+		Lair.spawn_item(get_tree(), &"corpse", Vector2(150 + _drops * 50, (DEMO.ground + 25) * Sim.CELL), self)
 	if altar != null and int(altar.hopper.get(&"stitched_body", 0)) > 0 and not altar.touched and not altar.working:
 		altar.interact(null)
 	if GameState.mana < 0.5:

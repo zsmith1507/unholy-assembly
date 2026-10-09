@@ -6,6 +6,7 @@ extends Node2D
 const LOGISTICS := {
 	"haul_priority": 5,
 	"haul_to_machine_priority": 4,
+	"haul_missing_priority": 3, # an item the machine's next batch still lacks jumps the queue
 	"post_every_s": 0.5,
 }
 ## Light needs: morale falls with work and rises with rest and food. Below the thresholds: memo, slowdown, strike.
@@ -108,8 +109,10 @@ func post_haul_jobs() -> void:
 				best_d = d
 				best = m
 		if best != null:
-			Jobs.post({"type": Jobs.HAUL, "item": it, "target": best, "priority": LOGISTICS.haul_to_machine_priority})
 			var per2: Dictionary = pending.get(best.get_instance_id(), {})
+			var short: bool = best.missing(k) - int(per2.get(k, 0)) > 0
+			var pri: int = LOGISTICS.haul_missing_priority if short else LOGISTICS.haul_to_machine_priority
+			Jobs.post({"type": Jobs.HAUL, "item": it, "target": best, "priority": pri})
 			per2[k] = int(per2.get(k, 0)) + 1
 			pending[best.get_instance_id()] = per2
 			continue
