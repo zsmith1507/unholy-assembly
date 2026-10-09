@@ -10,6 +10,7 @@
 
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
@@ -60,6 +61,9 @@ public:
 	void spill(int x, int y, int mat, int count, float vx, float vy);
 	void ignite(int x, int y, int r);
 	void explode(int cx, int cy, int r, float force); // carve a crater, scatter debris, start fires
+	// Falling ground that landed on something since the last call: [{rect: Rect2i, force: float}].
+	// (Falling chunks are not simulated yet, so for now this is always empty; code against it safely.)
+	Array take_crush_events();
 
 	// --- rendering ---
 	// Writes the cells in [x0, x0+image.width) x [y0, y0+image.height) into an RGBA8 image.
@@ -114,6 +118,8 @@ private:
 	void update_liquid(int x, int y, int i, bool lf);
 	void update_gas(int x, int y, int i, bool lf);
 	void update_fire(int x, int y, int i);
+	void catch_fire(int j, int m);
+	Array crush_events;
 	bool can_displace(int m, int target) const;
 	void step_particles();
 };

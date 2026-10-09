@@ -1,4 +1,5 @@
 #include "sand_world.h"
+#include "tuning.h"
 
 #include <godot_cpp/core/class_db.hpp>
 
@@ -250,6 +251,14 @@ void SandWorld::update_powder(int x, int y, int i, bool lf) {
 		swap_cells(i, below);
 		return;
 	}
+	// FRIC: a grain on a slope may come to rest; SLUMP: sluggish stuff (flesh, mud) only moves some ticks
+	const MatDef &pd = mat_def(mat[i]);
+	if (rnd() < pd.fric || rnd() > pd.slump) {
+		if (rnd() < 0.5f) {
+			wake_at(x, y); // stay awake a little so a resting grain can still be knocked loose
+		}
+		return;
+	}
 	int d1 = lf ? -1 : 1;
 	for (int k = 0; k < 2; k++) {
 		int d = k == 0 ? d1 : -d1;
@@ -274,6 +283,14 @@ void SandWorld::update_liquid(int x, int y, int i, bool lf) {
 	if (y + 1 < h) {
 		int below = i + w;
 		const MatDef &b = mat_def(mat[below]);
+		// ABSORB: soil drinks liquid that sits on it (stone and bone hold it). Grave dirt soaked in blood or water turns to mud.
+		if (b.absorb > 0 && rnd() < b.absorb) {
+			if (mat[below] == DIRT && (mat[i] == BLOOD || mat[i] == HOLY) && rnd() < tune::SOIL.mud) {
+				put(below, MUD);
+			}
+			put(i, EMPTY);
+			return;
+		}
 		if (b.kind == K_EMPTY || b.kind == K_GAS || b.kind == K_FIRE) {
 			swap_cells(i, below);
 			return;
@@ -347,6 +364,18 @@ void SandWorld::update_gas(int x, int y, int i, bool lf) {
 	}
 }
 
+void SandWorld::catch_fire(int j, int m) {
+	const MatDef &d = mat_def(m);
+	put(j, FIRE);
+	if (d.fuel1 > 0) {
+		// FIRE block: fuel is how many ticks this material burns; timber and flesh smoulder long and leave embers
+		life[j] = (uint16_t)(d.fuel0 + (rnd_u() % (uint32_t)(d.fuel1 - d.fuel0 + 1)));
+		shade[j] = (uint8_t)((shade[j] & ~1u) | (d.fuel0 >= 200 ? 1u : 0u));
+	} else {
+		shade[j] &= ~1u;
+	}
+}
+
 void SandWorld::update_fire(int x, int y, int i) {
 	wake_at(x, y);
 	// spread to flammable neighbours; water-like liquids put it out
@@ -360,15 +389,12 @@ void SandWorld::update_fire(int x, int y, int i) {
 		int j = idx(xx, yy);
 		int m = mat[j];
 		const MatDef &d = mat_def(m);
-		if (m == BLOOD || m == HOLY || m == EMBALM) {
+		if (m == BLOOD || m == HOLY) {
 			put(i, STEAM);
 			return;
 		}
-		if (d.flammability > 0 && rnd() < d.flammability) {
-			put(j, FIRE);
-			if (m == WOOD || m == PLANK) {
-				life[j] = (uint16_t)(life[j] * 4); // timber burns long
-			}
+		if (d.fueled && rnd() < tune::CATCH_SCALE / ((1.0f + d.ign) * (1.0f + d.ign))) {
+			catch_fire(j, m);
 		}
 	}
 	if (life[i] > 0) {
@@ -376,15 +402,24 @@ void SandWorld::update_fire(int x, int y, int i) {
 	}
 	if (life[i] == 0) {
 		float r = rnd();
-		put(i, r < 0.35f ? SMOKE : (r < 0.42f ? ASH : EMPTY));
+		// long-burning fuel (timber, flesh) leaves embers behind; everything leaves some smoke and ash
+		bool long_burn = shade[i] & 1;
+		put(i, (long_burn && r < tune::EMBER_LEAVE) ? EMBER : (r < 0.35f ? SMOKE : (r < 0.42f ? ASH : EMPTY)));
 		return;
 	}
-	// flames lick upward
-	if (y > 0 && rnd() < 0.3f) {
-		int up = i - w;
-		if (mat_def(mat[up]).kind == K_EMPTY) {
-			swap_cells(i, up);
+	int up = i - w;
+	if (shade[i] & 1) {
+		// burning fuel stays put and throws short flames into the air above it
+		if (y > 0 && mat_def(mat[up]).kind == K_EMPTY && rnd() < tune::FUEL_FLAME) {
+			put(up, FIRE);
+			shade[up] &= ~1u;
+			life[up] = (uint16_t)(10 + rnd_u() % 20);
 		}
+		return;
+	}
+	// loose flames lick upward
+	if (y > 0 && rnd() < 0.3f && mat_def(mat[up]).kind == K_EMPTY) {
+		swap_cells(i, up);
 	}
 }
 
@@ -539,7 +574,11 @@ void SandWorld::ignite(int x, int y, int r) {
 			}
 			int i = idx(xx, yy);
 			const MatDef &d = mat_def(mat[i]);
-			if (d.flammability > 0 || d.kind == K_EMPTY) {
+			if (d.fueled || d.kind == K_EMPTY) {
+				if (d.fueled) {
+					catch_fire(i, mat[i]);
+					continue;
+				}
 				if (d.kind == K_EMPTY && rnd() > 0.3f) {
 					continue;
 				}
@@ -578,6 +617,12 @@ void SandWorld::explode(int cx, int cy, int r, float force) {
 			put(i, (dist > r * 0.75f && rnd() < 0.3f) ? FIRE : (rnd() < 0.2f ? SMOKE : EMPTY));
 		}
 	}
+}
+
+Array SandWorld::take_crush_events() {
+	Array out = crush_events;
+	crush_events = Array();
+	return out;
 }
 
 // ---------------------------------------------------------------- rendering
@@ -652,10 +697,10 @@ void SandWorld::render_glow(const Ref<Image> &image, int x0, int y0) {
 			}
 			int i = idx(wx, wy);
 			const MatDef &d = mat_def(mat[i]);
-			if (!d.emissive) {
+			if (!d.glow) {
 				continue;
 			}
-			uint32_t c = d.colors[2];
+			uint32_t c = d.glow;
 			uint8_t *o = p + ((size_t)yy * iw + xx) * 4;
 			o[0] = (c >> 16) & 0xff;
 			o[1] = (c >> 8) & 0xff;
@@ -738,6 +783,7 @@ void SandWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("spill", "x", "y", "mat", "count", "vx", "vy"), &SandWorld::spill);
 	ClassDB::bind_method(D_METHOD("ignite", "x", "y", "r"), &SandWorld::ignite);
 	ClassDB::bind_method(D_METHOD("explode", "cx", "cy", "r", "force"), &SandWorld::explode);
+	ClassDB::bind_method(D_METHOD("take_crush_events"), &SandWorld::take_crush_events);
 
 	ClassDB::bind_method(D_METHOD("render_region", "image", "x0", "y0"), &SandWorld::render_region);
 	ClassDB::bind_method(D_METHOD("render_glow", "image", "x0", "y0"), &SandWorld::render_glow);

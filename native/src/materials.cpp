@@ -164,7 +164,7 @@ void init_materials() {
 			d.st_lut[k][3] = (uint8_t)(a * 255);
 		}
 	}
-	for (const FireDef &f : FIRE) {
+	for (const FireDef &f : tune::FIRE) {
 		MatDef &d = g_defs[f.mat];
 		d.fueled = true;
 		d.ign = f.ign;

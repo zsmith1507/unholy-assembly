@@ -106,6 +106,9 @@ struct FireDef {
 	int burn_depth;
 	float air_ign, air_burn;
 };
+constexpr float CATCH_SCALE = 0.25f; // chance per tick a flame lights touching fuel: CATCH_SCALE / (1 + ign)^2 (wood ~0.4%, tallow ~1.6%)
+constexpr float FUEL_FLAME = 0.08f; // burning fuel throws a flame into the air above this often
+constexpr float EMBER_LEAVE = 0.35f; // share of burnt-out timber/flesh cells that leave a glowing ember
 constexpr FireDef FIRE[] = {
 	{ WOOD, 7, 900, 1500, 3.2f, 0.09f, 1, 0, 0 }, // coffin wood: catches slowly, burns ~20 s, sheds embers
 	{ FLESH, 5, 300, 520, 3.4f, 0.07f, 1, 0, 0 },
