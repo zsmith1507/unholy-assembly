@@ -45,10 +45,26 @@ static func frames(sprite_name: String) -> SpriteFrames:
 	return sf
 
 
-## Offset that puts a sprite's feet on its node's origin.
+## Offset that puts a sprite's feet on its node's origin. Real art has the feet on the frame's bottom row.
 static func feet_offset(sprite_name: String) -> Vector2:
+	var sf := frames(sprite_name)
+	if sf.has_animation(&"idle") and sf.get_frame_count(&"idle") > 0:
+		var t := sf.get_frame_texture(&"idle", 0)
+		if t:
+			return Vector2(0, -t.get_height() * 0.5)
 	var s: Array = SIZES.get(sprite_name, [16, 32, Color.MAGENTA])
 	return Vector2(0, -s[1] * 0.5)
+
+
+## The emissive layer (necrotic glow) for a sprite, or null. Same layout as frames(); draw it unshaded.
+static func glow_frames(sprite_name: String) -> SpriteFrames:
+	var key := sprite_name + "#glow"
+	if _cache.has(key):
+		return _cache[key]
+	var path := "res://art/sprites/%s_glow.tres" % sprite_name
+	var sf: SpriteFrames = load(path) if ResourceLoader.exists(path) else null
+	_cache[key] = sf
+	return sf
 
 
 ## A ready-to-use AnimatedSprite2D with feet at the origin, playing "idle".
@@ -57,6 +73,30 @@ static func make_sprite(sprite_name: String) -> AnimatedSprite2D:
 	a.sprite_frames = frames(sprite_name)
 	a.offset = feet_offset(sprite_name)
 	a.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var gf := glow_frames(sprite_name)
+	if gf:
+		# Glow rides along as an unshaded, additive child that mirrors the parent's animation and flip,
+		# so hands and eyes stay bright in the dark.
+		var g := AnimatedSprite2D.new()
+		g.name = "Glow"
+		g.sprite_frames = gf
+		g.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var mat := CanvasItemMaterial.new()
+		mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+		mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		g.material = mat
+		a.add_child(g)
+		var sync := func() -> void:
+			g.offset = a.offset
+			g.flip_h = a.flip_h
+			g.flip_v = a.flip_v
+			if gf.has_animation(a.animation):
+				g.animation = a.animation
+				g.frame = a.frame
+			g.visible = a.visible
+		a.frame_changed.connect(sync)
+		a.animation_changed.connect(sync)
+		a.draw.connect(sync)
 	if a.sprite_frames.has_animation(&"idle"):
 		a.play(&"idle")
 	return a
