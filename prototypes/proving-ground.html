@@ -1,0 +1,3165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unholy Assembly Spell Range</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Alegreya+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a workbench. The pit (canvas) dominates; a narrow reagent kit sits to its right, stacking below on phones. Single dark look by design. */
+:root {
+  --bg: #110e12;
+  --surface: #1a1519;
+  --line: #2f272c;
+  --fg: #ddd2bf;
+  --muted: #92867c;
+  --accent: #c98a3b;
+  --blood: #9a2222;
+  --f-display: "Pirata One", "UnifrakturMaguntia", Georgia, serif;
+  --f-body: "Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-inline: 16px;
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 18px; }
+
+.top { display: grid; gap: 4px; }
+.eyebrow {
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+.eyebrow b { color: var(--accent); font-weight: 500; }
+h1 {
+  font-family: var(--f-display); font-weight: 400;
+  font-size: clamp(2.2rem, 4.4vw, 3.4rem); line-height: 1; margin: 0;
+  letter-spacing: .01em; text-wrap: balance;
+}
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.lede kbd, .kbd {
+  font-family: var(--f-mono); font-size: 11px; color: var(--fg);
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+  padding: 0 5px; background: var(--surface);
+}
+
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 920px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { display: grid; gap: 8px; min-width: 0; }
+.pit {
+  position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9;
+  border: 1px solid var(--line); background: #0b090c;
+  box-shadow: 0 0 0 4px #0b090c, 0 0 0 5px var(--line), 0 18px 40px rgba(0,0,0,.5);
+}
+.pit canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: none; }
+.pit::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 52%, rgba(0,0,0,.55) 100%);
+}
+.paused {
+  position: absolute; top: 10px; left: 12px; z-index: 1;
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); background: rgba(11,9,12,.8); padding: 3px 8px; border: 1px solid var(--line);
+}
+.readout {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  font-family: var(--f-mono); font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.readout span b { color: var(--fg); font-weight: 500; }
+
+.kit { display: grid; gap: 18px; min-width: 0; }
+.sec { display: grid; gap: 10px; }
+.sec + .sec { border-top: 1px solid var(--line); padding-top: 16px; }
+h2 {
+  font-family: var(--f-display); font-weight: 400; font-size: 1.5rem; line-height: 1;
+  margin: 0; color: var(--fg);
+}
+.mats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+@media (max-width: 920px) and (min-width: 560px) { .mats { grid-template-columns: repeat(4, 1fr); } }
+.mat {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  font: inherit; font-size: 14px; color: var(--fg); text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 2px;
+  padding: 6px 8px; cursor: pointer;
+}
+.mat:hover { border-color: #4a3f45; }
+.mat:focus-visible, .btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mat[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.mat .sw {
+  flex: none; width: 16px; height: 16px; border: 1px solid rgba(0,0,0,.6);
+  image-rendering: pixelated; background-size: 8px 8px;
+}
+.mat .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mat .k { font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
+
+.detail { display: grid; gap: 2px; min-height: 64px; }
+.detail .dn { font-family: var(--f-display); font-size: 1.35rem; line-height: 1.1; color: var(--accent); }
+.detail p { margin: 0; color: var(--muted); font-size: 14px; }
+
+.row { display: flex; align-items: center; gap: 10px; }
+.row label { font-size: 14px; flex: none; }
+.row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.row output { font-family: var(--f-mono); font-size: 12px; min-width: 3ch; width: auto; text-align: right; font-variant-numeric: tabular-nums; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.btn {
+  font: inherit; font-size: 14px; color: var(--fg); cursor: pointer;
+  background: transparent; border: 1px solid var(--line); border-radius: 2px; padding: 6px 8px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.btn:hover { background: var(--surface); }
+.btn .kbd { font-size: 10px; }
+
+.rx { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 14px; }
+.rx li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.rx .op { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.rx .out { color: var(--accent); }
+.foot { font-size: 13px; color: var(--muted); margin: 0; max-width: 70ch; }
+
+.pit canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.spells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.focus-hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 1; pointer-events: none;
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+  color: var(--fg); background: rgba(11,9,12,.82); border: 1px solid var(--accent); padding: 5px 10px;
+}
+.slot {
+  font: inherit; cursor: pointer; padding: 0;
+  aspect-ratio: 1; border: 1px solid var(--line); border-radius: 2px; background: var(--surface);
+  display: grid; place-items: center; position: relative; color: var(--muted);
+  font-family: var(--f-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+}
+.slot .key { position: absolute; top: 3px; left: 5px; font-size: 10px; color: var(--muted); }
+.slot.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--fg); }
+.slot.on .glyph { width: 60%; height: 60%; }
+.slot.empty { opacity: .45; cursor: default; }
+.slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.reliq { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.reliq li { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
+.reliq .sw { flex: none; width: 12px; height: 12px; border: 1px solid rgba(0,0,0,.6); }
+.reliq .n { margin-left: auto; font-family: var(--f-mono); font-size: 13px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.reliq li.bump .n { color: var(--accent); }
+.spell-card { display: grid; gap: 4px; }
+.spell-card .dn { font-family: var(--f-display); font-size: 1.5rem; line-height: 1.1; color: var(--accent); }
+.spell-card p { margin: 0; color: var(--muted); font-size: 14px; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--fg); font-weight: 500; }
+.bite { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.bite td { padding: 3px 0; vertical-align: middle; }
+.bite td.num { font-family: var(--f-mono); font-size: 12px; color: var(--fg); text-align: right; padding-right: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bite td.bar { width: 42%; }
+.bite td.bar span { display: block; height: 6px; background: #8f6bc9; border-radius: 1px; }
+.bite caption { caption-side: bottom; text-align: left; color: var(--muted); font-size: 12.5px; padding-top: 6px; }
+.keys-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 14px; }
+.keys-list li { display: flex; gap: 8px; align-items: baseline; }
+.keys-list .k { flex: none; min-width: 92px; display: flex; gap: 3px; flex-wrap: wrap; }
+.row select { flex: 1; min-width: 0; font: inherit; font-size: 14px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 2px; padding: 4px 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow"><b>Unholy Assembly</b> · Prototype 02 · Spell range</div>
+    <h1>The Proving Ground</h1>
+    <p class="lede">Click the range, then walk the graveyard with WASD and dig into what's buried beneath it. Hold the left mouse button to channel the chosen spell toward your cursor: <b>Dig</b> carves through the ground, <b>Harvest</b> tears the dead apart and draws them into your hand. Crusaders of the Dawn Vigil patrol the graves; they make excellent raw material.</p>
+  </header>
+
+  <main class="bench">
+    <section class="stage" aria-label="Spell range">
+      <div class="pit">
+        <div class="paused" id="paused" hidden>Paused</div>
+        <div class="focus-hint" id="focus-hint">Click the range to take control</div>
+        <canvas id="view" tabindex="0" aria-label="Spell range. Move with W A S D, jump with W or Space, hold the left mouse button to channel Dig toward the cursor."></canvas>
+      </div>
+      <div class="readout" aria-live="off">
+        <span>cell <b id="ro-xy">—</b></span>
+        <span>under cursor <b id="ro-mat">—</b></span>
+        <span>mana <b id="ro-mana">100 / 100</b></span>
+        <span><b id="ro-fps">0</b> fps</span>
+      </div>
+    </section>
+
+    <aside class="kit">
+      <div class="sec">
+        <h2>Grimoire</h2>
+        <div class="spells" role="list" aria-label="Spell slots">
+          <button class="slot on" type="button" role="listitem" data-spell="dig" aria-pressed="true" title="Dig"><span class="key">1</span>
+            <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 L13 11" stroke="#c9ff8a" stroke-width="2.2" stroke-linecap="round"/><path d="M13 11 L20 4 M15 4 L20 4 L20 9" stroke="#8f6bc9" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="6.5" cy="17.5" r="2.4" fill="#d8ccaa"/></svg>
+          </button>
+          <button class="slot" type="button" role="listitem" data-spell="harvest" aria-pressed="false" title="Harvest"><span class="key">2</span>
+            <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21 L7 12 M10 21 L10 9 M13 21 L13 8 M16 21 L16 10 M7 14 L4 11" stroke="#d8ccaa" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M10 9 L9 6 M13 8 L13 4.5 M16 10 L17.5 7" stroke="#d8ccaa" stroke-width="1.2" stroke-linecap="round"/><circle cx="12" cy="3.5" r="1.3" fill="#b0263a"/><circle cx="18.5" cy="5.5" r="1" fill="#b0263a"/><circle cx="7.5" cy="5" r="0.9" fill="#b0263a"/></svg>
+          </button>
+          <div class="slot empty" role="listitem"><span class="key">3</span>empty</div>
+          <div class="slot empty" role="listitem"><span class="key">4</span>empty</div>
+        </div>
+        <div class="spell-card">
+          <div class="dn" id="sp-name">Dig</div>
+          <p id="sp-desc"></p>
+          <div class="stats"><span>channel</span><span><b id="sp-cost">9.8</b> mana / s</span><span>reach <b id="sp-range">36</b> cells</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2 id="bite-h">How fast it bites</h2>
+        <table class="bite"><tbody id="bite"></tbody>
+          <caption id="bite-cap"></caption>
+        </table>
+      </div>
+
+      <div class="sec">
+        <h2>Reliquary</h2>
+        <ul class="reliq" id="reliq"></ul>
+      </div>
+
+      <div class="sec">
+        <h2>Controls</h2>
+        <ul class="keys-list">
+          <li><span class="k"><span class="kbd">A</span><span class="kbd">D</span></span>Walk left and right</li>
+          <li><span class="k"><span class="kbd">W</span><span class="kbd">Space</span></span>Jump, or swim up</li>
+          <li><span class="k"><span class="kbd">S</span></span>Dive, or drop faster</li>
+          <li><span class="k"><span class="kbd">1</span><span class="kbd">2</span></span>Choose a spell</li>
+          <li><span class="k"><span class="kbd">Left mouse</span></span>Channel the chosen spell</li>
+          <li><span class="k"><span class="kbd">Right mouse</span></span>Paint the test material</li>
+          <li><span class="k"><span class="kbd">P</span></span>Pause</li>
+          <li><span class="k"><span class="kbd">C</span></span>Summon a crusader at the cursor</li>
+          <li><span class="k"><span class="kbd">R</span></span>New graveyard</li>
+        </ul>
+      </div>
+
+      <div class="sec">
+        <h2>Test brush</h2>
+        <div class="row">
+          <label for="testmat">Material</label>
+          <select id="testmat"></select>
+        </div>
+        <div class="row">
+          <label for="brush">Brush</label>
+          <input type="range" id="brush" min="1" max="16" value="4">
+          <output id="brush-out" for="brush">4</output>
+        </div>
+        <div class="row">
+          <label for="wind">Wind</label>
+          <input type="range" id="wind" min="-10" max="10" value="0">
+          <output id="wind-out" for="wind">calm</output>
+        </div>
+        <div class="btns">
+          <button class="btn" id="b-foe" type="button"><span>Summon a crusader</span><span class="kbd">C</span></button>
+          <button class="btn" id="b-regen" type="button"><span>New graveyard</span><span class="kbd">R</span></button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <p class="foot">Built on the same falling-sand engine as the Charnel Pit, so everything you dig loose behaves the same way: liquid pockets spill, grave dirt caves in, flesh bleeds and stains. Keyboard and mouse only for now.</p>
+</div>
+
+<script>
+(() => {
+  // ---------- grid ----------
+  const W = 320, H = 180, N = W * H;
+  const EMPTY = 0, STONE = 1, DIRT = 2, ASH = 3, BONE = 4, FLESH = 5, WOOD = 6,
+        BLOOD = 7, HOLY = 8, ICHOR = 9, TALLOW = 10, FIRE = 11, SMOKE = 12,
+        STEAM = 13, MIASMA = 14, MUD = 15, SPOUT = 16, EMBER = 17,
+        EARTH = 18, BEDROCK = 19, RUBBLE = 20, BONEBIT = 21, ERASE = 99;
+  const K_EMPTY = 0, K_STATIC = 1, K_POWDER = 2, K_LIQUID = 3, K_GAS = 4, K_FIRE = 5, K_SPOUT = 6;
+
+  // name, kind, density, flammability, dispersion, viscosity(skip chance), colors
+  const DEF = [];
+  function def(id, o) { DEF[id] = o; }
+  def(EMPTY,  { name: 'Empty', kind: K_EMPTY, dens: 0 });
+  def(STONE,  { name: 'Crypt Stone', kind: K_STATIC, dens: 99, c: ['#3b3a44','#34333c','#43414b','#2e2d35'] });
+  def(DIRT,   { name: 'Grave Dirt', kind: K_POWDER, dens: 2.5, c: ['#4a3526','#3f2d20','#56412f','#3a2a1d'] });
+  def(ASH,    { name: 'Ash', kind: K_POWDER, dens: 1.5, c: ['#6e6a66','#615d5a','#7a7672','#57534f'] });
+  def(BONE,   { name: 'Bone', kind: K_STATIC, dens: 99, c: ['#d8ccaa','#cbbd98','#e2d8bb','#bfb08a'] });
+  def(FLESH,  { name: 'Flesh', kind: K_POWDER, dens: 2.0, c: ['#8f5b5a','#7f4d4e','#9c6764','#754546'] });
+  def(WOOD,   { name: 'Coffin Wood', kind: K_STATIC, dens: 99, c: ['#4d3220','#432b1b','#573a26','#3b2618'] });
+  // disp: cells of sideways flow per tick. visc: chance to sit still a tick. spl: splashiness 0..1
+  // damp: share of velocity kept per tick while touching something (lower = thicker)
+  def(BLOOD,  { name: 'Blood', kind: K_LIQUID, dens: 1.06, disp: 8, visc: 0, spl: 0.8, damp: 0.94, c: ['#7d0f14','#6e0c11','#8a1419','#650a0f'] });
+  def(HOLY,   { name: 'Holy Water', kind: K_LIQUID, dens: 1.0, disp: 11, visc: 0, spl: 1, damp: 0.96, c: ['#5d7a96','#577390','#6886a2','#52708b'] });
+  def(ICHOR,  { name: 'Ichor', kind: K_LIQUID, dens: 1.3, disp: 3, visc: 0.35, spl: 0.18, damp: 0.78, c: ['#6f9a1e','#628a19','#7dab25','#587d15'] });
+  def(TALLOW, { name: 'Tallow', kind: K_LIQUID, dens: 0.9, disp: 6, visc: 0.08, spl: 0.55, damp: 0.9, c: ['#c9b37a','#bea86f','#d4bf86','#b49d64'] });
+  def(FIRE,   { name: 'Fire', kind: K_FIRE, dens: -0.5, c: ['#e0602a','#f4a03a','#ffd166','#a8331f'] });
+  def(SMOKE,  { name: 'Smoke', kind: K_GAS, dens: -3, rise: 0.7, life: [60, 140], a: 0.55, c: ['#3a3638'] });
+  def(STEAM,  { name: 'Steam', kind: K_GAS, dens: -2, rise: 0.85, life: [70, 160], a: 0.4, c: ['#b8c4cc'] });
+  def(MIASMA, { name: 'Miasma', kind: K_GAS, dens: -1, rise: 0.3, life: [400, 800], a: 0.5, c: ['#8a9a3a'] });
+  def(MUD,    { name: 'Mud', kind: K_POWDER, dens: 2.6, c: ['#2f2219','#29201a','#36281d','#241a14'] });
+  def(SPOUT,  { name: 'Spout', kind: K_SPOUT, dens: 99, c: ['#1f1c20'] });
+  def(EMBER,  { name: 'Ember', kind: K_POWDER, dens: 1.4, c: ['#c4471c','#a8331f','#e0602a','#7a2414'] });
+  def(EARTH,  { name: 'Packed Earth', kind: K_STATIC, dens: 99, c: ['#3a2a20','#33251c','#412f24','#2d2018'] });
+  def(BEDROCK,{ name: 'Bedrock', kind: K_STATIC, dens: 99, c: ['#1d1b22','#18161c','#232028','#141217'] });
+  def(RUBBLE, { name: 'Rubble', kind: K_POWDER, dens: 2.8, c: ['#4a4852','#3f3d46','#55535d','#36343c'] });
+  def(BONEBIT,{ name: 'Bone Shards', kind: K_POWDER, dens: 2.2, c: ['#cdbf9c','#bfb08a','#d8ccaa','#b3a47e'] });
+
+  // Burning. ign: heat a cell must soak up before it catches (lower = catches sooner).
+  // fuel: ticks it burns (60 per second). heat: heat it gives off per tick while burning. flame: chance per tick to throw a flame.
+  // Tallow sitting in a pool only burns near its surface; airborne tallow (air*) flashes.
+  // burnDepth (flammable liquids): how many layers down from the surface can be burning at once while it sits in a pool.
+  DEF[WOOD].fire   = { ign: 7,  fuel: [900, 1500], heat: 3.2, flame: 0.09 };
+  DEF[FLESH].fire  = { ign: 5,  fuel: [300, 520],  heat: 3.4, flame: 0.07 };
+  DEF[TALLOW].fire = { ign: 3,  fuel: [100, 165], burnDepth: 3,  heat: 3.4, flame: 0.12, airIgn: 1.2, airBurn: 20 };
+  DEF[EMBER].fire  = { ign: 0,  fuel: [120, 320],  heat: 1.4, flame: 0.025 };
+
+  // Stains: pen = how far an impact drives the stain into a surface (times impact speed),
+  // p = chance per contact tick to mark a surface, ticks = how long it lasts (60 per second),
+  // a = how dark it gets, fresh -> aged colour over the first `ageBy` of its life, fades out over the last `fadeBy`.
+  DEF[BLOOD].stain  = { pen: 1.0, p: 0.10, ticks: 21600, a: 0.85, fresh: '#6e0d12', aged: '#3f2617', ageBy: 0.30, fadeBy: 0.25 };
+  DEF[ICHOR].stain  = { pen: 0.6, p: 0.06, ticks: 7200,  a: 0.70, fresh: '#6f9a1e', aged: '#46521d', ageBy: 0.50, fadeBy: 0.40, glow: true };
+  DEF[TALLOW].stain = { pen: 0.7, p: 0.05, ticks: 10800, a: 0.45, fresh: '#cdb87e', aged: '#7a683e', ageBy: 0.60, fadeBy: 0.30 };
+  DEF[HOLY].stain   = { pen: 1.0, p: 0.04, ticks: 900,   a: 0.40, fresh: '#14202c', aged: '#1a1f26', ageBy: 1.00, fadeBy: 0.70, cleans: true };
+
+  // Miscible pairs: chance per tick that touching cells trade concentration. Pairs not listed never blend.
+  const MIX_PAIRS = [
+    [BLOOD, HOLY, 0.16],   // blood thins into holy water
+    [BLOOD, ICHOR, 0.04],  // ichor slowly taints blood
+  ];
+
+  const T = DEF.length;
+  const MIXR = new Float32Array(T * T);
+  MIX_PAIRS.forEach(([a, b, r]) => { MIXR[a * T + b] = r; MIXR[b * T + a] = r; });
+  const KIND = new Uint8Array(T), DENS = new Float32Array(T),
+        IGN = new Float32Array(T), FUEL0 = new Uint16Array(T), FUEL1 = new Uint16Array(T),
+        BHEAT = new Float32Array(T), FLAMEP = new Float32Array(T), FUELED = new Uint8Array(T), BDEPTH = new Uint8Array(T),
+        DISP = new Uint8Array(T), VISC = new Float32Array(T), MOVABLE = new Uint8Array(T),
+        SPL = new Float32Array(T), DAMP = new Float32Array(T);
+  for (let t = 0; t < T; t++) {
+    const d = DEF[t]; if (!d) continue;
+    KIND[t] = d.kind; DENS[t] = d.dens;
+    if (d.fire) { BDEPTH[t] = d.fire.burnDepth || 1; FUELED[t] = 1; IGN[t] = d.fire.ign; FUEL0[t] = d.fire.fuel[0]; FUEL1[t] = d.fire.fuel[1]; BHEAT[t] = d.fire.heat; FLAMEP[t] = d.fire.flame; }
+    DISP[t] = d.disp || 0; VISC[t] = d.visc || 0; SPL[t] = d.spl || 0; DAMP[t] = d.damp || 0.9;
+    MOVABLE[t] = (d.kind !== K_STATIC && d.kind !== K_SPOUT) ? 1 : 0;
+  }
+
+  const hex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const pack = (r, g, b) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+  const PAL = new Uint32Array(T * 4);
+  for (let t = 0; t < T; t++) {
+    const d = DEF[t]; if (!d || !d.c) continue;
+    for (let s = 0; s < 4; s++) { const c = hex(d.c[s % d.c.length]); PAL[t*4+s] = pack(c[0], c[1], c[2]); }
+  }
+  const PAL_RGB = new Uint8Array(T * 12);
+  for (let t = 0; t < T; t++) {
+    const d = DEF[t]; if (!d || !d.c) continue;
+    for (let s = 0; s < 4; s++) { const c = hex(d.c[s % d.c.length]); PAL_RGB.set(c, t * 12 + s * 3); }
+  }
+  // stain lookup: per liquid, 64 age steps -> r,g,b,alpha(0..255)
+  const STAIN_P = new Float32Array(T), STAIN_TICKS = new Uint16Array(T), STAIN_LUT = new Uint8Array(T * 64 * 4);
+  const STAIN_GLOW = new Uint8Array(T);
+  for (let t = 0; t < T; t++) {
+    const s = DEF[t] && DEF[t].stain; if (!s) continue;
+    STAIN_P[t] = s.p; STAIN_TICKS[t] = s.ticks; STAIN_GLOW[t] = s.glow ? 1 : 0;
+    const f0 = hex(s.fresh), f1 = hex(s.aged);
+    for (let k = 0; k < 64; k++) {
+      const age = k / 63;                                   // 0 fresh .. 1 gone
+      const m = Math.min(1, age / s.ageBy);
+      const a = s.a * (age < 1 - s.fadeBy ? 1 : Math.max(0, (1 - age) / s.fadeBy));
+      const o = (t * 64 + k) * 4;
+      STAIN_LUT[o]     = f0[0] + (f1[0] - f0[0]) * m;
+      STAIN_LUT[o + 1] = f0[1] + (f1[1] - f0[1]) * m;
+      STAIN_LUT[o + 2] = f0[2] + (f1[2] - f0[2]) * m;
+      STAIN_LUT[o + 3] = a * 255;
+    }
+  }
+  const FIRE_PAL =['#fff1b8','#ffd166','#f4a03a','#e0602a','#a8331f','#5a1d14'].map(h => { const c = hex(h); return pack(c[0], c[1], c[2]); });
+  const GAS_RGB = []; [SMOKE, STEAM, MIASMA].forEach(t => GAS_RGB[t] = hex(DEF[t].c[0]));
+
+  const type = new Uint8Array(N), shade = new Uint8Array(N), aux = new Uint8Array(N);
+  const life = new Int16Array(N), stamp = new Uint16Array(N);
+  const vy = new Int8Array(N), vx = new Int8Array(N); // fall speed, flow direction
+  const stT = new Uint8Array(N), stL = new Uint16Array(N); // stain: which liquid, ticks remaining
+  const stI = new Uint8Array(N);                            // stain strength 0..255 (how soaked the cell is)
+  const mxT = new Uint8Array(N), mxA = new Uint8Array(N);  // liquid mix: the other liquid, its share 0..255
+  const fvx = new Float32Array(N), fvy = new Float32Array(N); // liquid velocity, cells per tick
+  const plg = new Uint8Array(N); // liquid plunge: 255 = falling through air, else slips left inside a pool
+  const burn = new Uint16Array(N);                          // fuel left while a cell is burning (0 = not burning); moves with the cell
+  const heat = new Float32Array(N), heat2 = new Float32Array(N); // heat field: belongs to the place, not the cell
+  const dmg = new Float32Array(N);                          // how far the Dig spell has worn a cell down
+  const mov = new Uint8Array(N);                            // powders: 1 = moving, 0 = resting (won't slide until disturbed)
+  const bodyOf = new Uint16Array(N);                        // ground that has broken loose: which falling chunk it belongs to
+  const collapseSeeds = [];                                 // places where solid ground was removed, to check for collapse
+  const MAXV = 7, G_LIQ = 0.32;
+  let frame = 1;
+
+  // airborne droplets: live outside the grid until they land
+  const MAXP = 6000;
+  const Px = new Float32Array(MAXP), Py = new Float32Array(MAXP), Pvx = new Float32Array(MAXP),
+        Pvy = new Float32Array(MAXP), Pt = new Uint8Array(MAXP), Ps = new Uint8Array(MAXP),
+        Pmt = new Uint8Array(MAXP), Pma = new Uint8Array(MAXP);
+  let pc = 0;
+
+  // xorshift
+  let seed = 0x9e3779b9 ^ (Date.now() & 0xffffffff);
+  function rnd() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; }
+
+  function set(i, t) {
+    const was = type[i];
+    type[i] = t; shade[i] = (rnd() * 256) | 0; aux[i] = 0; stamp[i] = frame; vy[i] = 0; vx[i] = 0;
+    if (KIND[was] === K_STATIC && was !== BEDROCK && KIND[t] !== K_STATIC) collapseSeeds.push(i);   // ground removed: check what it held up
+    if (t === EMPTY) {                                       // a hole opens: the grains around it are disturbed
+      const x0 = i % W;
+      if (i >= W) { mov[i - W] = 1; if (x0 > 0) mov[i - W - 1] = 1; if (x0 < W - 1) mov[i - W + 1] = 1; }
+      if (x0 > 0) mov[i - 1] = 1; if (x0 < W - 1) mov[i + 1] = 1;
+    }
+    fvx[i] = 0; fvy[i] = 0; plg[i] = 0; burn[i] = 0; dmg[i] = 0; mov[i] = 1; bodyOf[i] = 0;
+    stT[i] = 0; stL[i] = 0; stI[i] = 0; mxT[i] = 0; mxA[i] = 0;
+    const d = DEF[t];
+    life[i] = (d && d.life) ? d.life[0] + ((rnd() * (d.life[1] - d.life[0])) | 0) : 0;
+  }
+  // a flame: a short-lived tongue of fire that rises and heats the air around it
+  function setFlame(i, lo, hi) {
+    set(i, FIRE);
+    life[i] = lo + ((rnd() * (hi - lo)) | 0);
+  }
+  function swap(i, j) {
+    let a = type[i]; type[i] = type[j]; type[j] = a;
+    a = shade[i]; shade[i] = shade[j]; shade[j] = a;
+    a = aux[i]; aux[i] = aux[j]; aux[j] = a;
+    a = life[i]; life[i] = life[j]; life[j] = a;
+    a = vy[i]; vy[i] = vy[j]; vy[j] = a;
+    a = vx[i]; vx[i] = vx[j]; vx[j] = a;
+    a = stT[i]; stT[i] = stT[j]; stT[j] = a;
+    a = stL[i]; stL[i] = stL[j]; stL[j] = a;
+    a = stI[i]; stI[i] = stI[j]; stI[j] = a;
+    a = fvx[i]; fvx[i] = fvx[j]; fvx[j] = a;
+    a = fvy[i]; fvy[i] = fvy[j]; fvy[j] = a;
+    a = plg[i]; plg[i] = plg[j]; plg[j] = a;
+    a = burn[i]; burn[i] = burn[j]; burn[j] = a;
+    a = mov[i]; mov[i] = mov[j]; mov[j] = a;
+    a = bodyOf[i]; bodyOf[i] = bodyOf[j]; bodyOf[j] = a;
+    a = mxT[i]; mxT[i] = mxT[j]; mxT[j] = a;
+    a = mxA[i]; mxA[i] = mxA[j]; mxA[j] = a;
+    stamp[i] = frame; stamp[j] = frame;
+  }
+
+  // ---------- liquid mixing ----------
+  // share of liquid A in cell i (cells hold at most two liquids)
+  function shareOf(i, A) { return type[i] === A ? 1 - mxA[i] / 255 : (mxT[i] === A ? mxA[i] / 255 : 0); }
+  function setShare(i, A, B, f) {
+    if (f >= 0.5) { type[i] = A; mxA[i] = Math.round((1 - f) * 255); mxT[i] = mxA[i] ? B : 0; }
+    else          { type[i] = B; mxA[i] = Math.round(f * 255);       mxT[i] = mxA[i] ? A : 0; }
+  }
+  function mixCells(i, j) {
+    const A = type[i];
+    let B = 0;
+    const c1 = mxT[i], c2 = type[j], c3 = mxT[j];
+    for (const c of [c1, c2, c3]) {
+      if (!c || c === A) continue;
+      if (!B) B = c; else if (c !== B) return;       // three liquids: leave alone
+    }
+    if (!B) return;
+    const r = MIXR[A * T + B];
+    if (!r || rnd() > r) return;
+    const fi = shareOf(i, A), fj = shareOf(j, A), diff = fj - fi;
+    if (diff < 0.01 && diff > -0.01) return;
+    const k = 0.25 + rnd() * 0.25;
+    setShare(i, A, B, fi + diff * k);
+    setShare(j, A, B, fj - diff * k);
+  }
+
+  // ---------- stains ----------
+  function stainable(t) { const k = KIND[t]; return k === K_STATIC || k === K_POWDER; }
+  // How readily a surface soaks a stain in: porous ground drinks it deep, stone and bone keep it on the surface.
+  const SOAK = new Float32Array(T);
+  SOAK[STONE] = 0.3; SOAK[BONE] = 0.4; SOAK[WOOD] = 0.75; SOAK[EMBER] = 0.5;
+  SOAK[DIRT] = 1.1; SOAK[MUD] = 0.9; SOAK[ASH] = 1.3; SOAK[FLESH] = 1.0;
+  SOAK[EARTH] = 0.9; SOAK[RUBBLE] = 0.6; SOAK[BEDROCK] = 0.15; SOAK[BONEBIT] = 0.4;
+
+  // mark cell j with liquid t at strength s (0..255); returns false if it isn't a surface that takes stains
+  function putStain(j, t, s) {
+    if (!stainable(type[j])) return false;
+    if (DEF[t].stain.cleans && stT[j] && stT[j] !== t) {           // holy water scrubs other stains away
+      stI[j] = stI[j] > 70 ? stI[j] - 70 : 0;
+      if (!stI[j]) { stT[j] = 0; stL[j] = 0; }
+      return true;
+    }
+    if (stT[j] && stT[j] !== t && s < stI[j]) return true;         // a weaker stain doesn't cover a stronger one
+    const same = stT[j] === t;
+    stT[j] = t; stL[j] = STAIN_TICKS[t];
+    stI[j] = Math.min(255, same ? Math.max(stI[j], s) : s);
+    return true;
+  }
+  // liquid t sitting against surface cell j slowly soaks in
+  function stainAt(j, t, boost) {
+    if (!stainable(type[j])) return;
+    if (rnd() > STAIN_P[t] * (boost || 1)) return;
+    const prev = stT[j] === t ? stI[j] : 0;
+    putStain(j, t, Math.min(255, Math.max(110, prev + 22)));
+  }
+  // Liquid t hits surface cell `hit` moving along (dx, dy) at `speed` cells/tick: the stain is driven into the
+  // material along the line of travel (deeper for faster hits and softer materials, fading with depth),
+  // and a hard hit sprays smaller marks over the surface around it, leaning the way the liquid was moving.
+  function splatter(hit, t, dx, dy, speed) {
+    const sd = DEF[t].stain;
+    if (!sd || !stainable(type[hit])) return;
+    const len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+    const s0 = Math.min(255, 120 + speed * 22);
+    const reachDepth = speed * sd.pen;                             // in 'soak' units
+    let fx = (hit % W) + 0.5, fy = ((hit / W) | 0) + 0.5, budget = Math.max(1, reachDepth), last = -1, k = 0;
+    while (budget > 0 && k < 14) {
+      const cx = Math.floor(fx), cy = Math.floor(fy);
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) break;
+      const q = cy * W + cx;
+      if (q !== last) {
+        if (!putStain(q, t, s0 * Math.max(0.3, 1 - k / (reachDepth + 1.5)))) break;
+        budget -= 1 / Math.max(0.15, SOAK[type[q]]);               // hard materials use the push up fast
+        last = q; k++;
+      }
+      fx += ux * 0.6 + (rnd() - 0.5) * (0.35 + k * 0.12);         // wanders more the deeper it soaks
+      fy += uy * 0.6 + (rnd() - 0.5) * 0.35;
+      // soft materials wick the stain sideways a little as it goes down
+      if (q === last && k > 1 && rnd() < SOAK[type[q]] * 0.35) {
+        const side = q + (rnd() < 0.5 ? -1 : 1);
+        if (side >= 0 && side < N) putStain(side, t, s0 * 0.45 * Math.max(0.3, 1 - k / (reachDepth + 1.5)));
+      }
+    }
+    if (speed < 2) return;
+    // the spray: marks scattered across nearby surface, biased in the direction of travel
+    const hx = hit % W, hy = (hit / W) | 0;
+    const drops = Math.round(speed * 1.8 * (SPL[t] + 0.2));
+    const reach = 1.5 + speed * 1.1 * (SPL[t] + 0.1);
+    for (let n = 0; n < drops; n++) {
+      const r = rnd() * reach;
+      const ox = Math.round((rnd() * 2 - 1) * r + ux * r * 0.7);
+      const cx = hx + ox; if (cx < 0 || cx >= W) continue;
+      // find the surface in that column near the impact height
+      for (let cy = Math.max(0, hy - 3); cy <= Math.min(H - 1, hy + 3); cy++) {
+        const q = cy * W + cx;
+        if (stainable(type[q]) && cy > 0 && isOpen(q - W)) {
+          const fall = 1 - r / reach;
+          putStain(q, t, s0 * (0.35 + 0.45 * fall));
+          if (rnd() < fall * SOAK[type[q]] && q + W < N) putStain(q + W, t, s0 * 0.3 * fall);
+          break;
+        }
+      }
+    }
+  }
+  function decayStains(by) {
+    for (let i = 0; i < N; i++) {
+      if (!stL[i]) continue;
+      if (stL[i] <= by) { stL[i] = 0; stT[i] = 0; stI[i] = 0; } else stL[i] -= by;
+    }
+  }
+
+  // ---------- splashes ----------
+  function launch(i, svx, svy) {
+    if (pc >= MAXP) return false;
+    Px[pc] = (i % W) + 0.5; Py[pc] = ((i / W) | 0) + 0.5;
+    Pvx[pc] = svx; Pvy[pc] = svy; Pt[pc] = type[i]; Ps[pc] = shade[i];
+    Pmt[pc] = mxT[i]; Pma[pc] = mxA[i]; pc++;
+    mxT[i] = 0; mxA[i] = 0;
+    type[i] = EMPTY; vy[i] = 0; vx[i] = 0; aux[i] = 0; life[i] = 0; fvx[i] = 0; fvy[i] = 0;
+    return true;
+  }
+  function isOpen(j) { const k = KIND[type[j]]; return k === K_EMPTY || k === K_GAS || k === K_FIRE; }
+  // a blow of strength v breaks the surface at liquid cell b: surface cells beside it are thrown up and out
+  function crown(b, x, v) {
+    const s = SPL[type[b]];
+    if (!s || v < 3.5) return;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let r = 1; r <= 2; r++) {
+        const nx = x + side * r; if (nx < 0 || nx >= W) break;
+        const j = b + side * r;
+        if (KIND[type[j]] !== K_LIQUID || j < W || !isOpen(j - W)) break;
+        if (rnd() < 0.4 * s / r)
+          launch(j, side * v * (0.12 + rnd() * 0.22) * s, -v * (0.28 + rnd() * 0.32) * s);
+      }
+    }
+  }
+  function stepParticles() {
+    for (let p = 0; p < pc;) {
+      let svx = Pvx[p], svy = Pvy[p] + 0.32;
+      {
+        const cx = Px[p] | 0, cy = Py[p] | 0;                  // droplets ride the wind and the pulls
+        if (cx >= 0 && cx < W && cy >= 0 && cy < H) {
+          const q = cy * W + cx; svx += (windX[q] + windGlobal) * RESP_DROPLET; svy += windY[q] * RESP_DROPLET;
+          if (harvesting && coneMark[q] === coneTick) {        // blood lifted by Harvest drifts in at the same pace as the gore
+            const sp = Math.hypot(svx, svy); if (sp > REND.goreSpeed) { svx *= REND.goreSpeed / sp; svy *= REND.goreSpeed / sp; }
+          }
+        }
+      }
+      if (svy > MAXV) svy = MAXV;
+      svx *= 0.985;
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(svx), Math.abs(svy))));
+      const sx = svx / steps, sy = svy / steps;
+      let x = Px[p], y = Py[p], landed = false, hitCell = -1, lastOpen = -1;
+      for (let s = 0; s < steps; s++) {
+        const nx = x + sx, ny = y + sy;
+        const cx = Math.floor(nx), cy = Math.floor(ny);
+        if (cx < 0 || cx >= W) { svx = -svx * 0.4; break; }
+        if (cy < 0) { svy = 0; break; }
+        if (cy >= H) { landed = true; break; }
+        const q = cy * W + cx, tt = type[q];
+        // droplets pass through liquid that is itself still falling; they land on anything at rest
+        if (tt !== EMPTY && KIND[tt] !== K_GAS && KIND[tt] !== K_FIRE &&
+            !(KIND[tt] === K_LIQUID && fvy[q] >= 0.5 && plg[q] >= 254)) { landed = true; hitCell = q; break; }
+        x = nx; y = ny;
+        if (isOpen(q)) lastOpen = q;
+        if (Pt[p] === TALLOW && heat[q] > DEF[TALLOW].fire.airIgn && isOpen(q)) {   // a droplet of fat in hot air goes up all at once
+          setFlame(q, 8, 18); heat[q] += 14; landed = true; hitCell = -2; break;
+        }
+      }
+      Px[p] = x; Py[p] = y; Pvx[p] = svx; Pvy[p] = svy;
+      if (landed && hitCell === -2) {                         // burned up in the air
+        pc--;
+        Px[p] = Px[pc]; Py[p] = Py[pc]; Pvx[p] = Pvx[pc]; Pvy[p] = Pvy[pc]; Pt[p] = Pt[pc]; Ps[p] = Ps[pc];
+        Pmt[p] = Pmt[pc]; Pma[p] = Pma[pc];
+        continue;
+      }
+      if (landed && hitCell >= 0 && HSOFT[Pt[p]] && inPull(x, y)) {   // held by the pull: it skims a cell above the ground instead
+        const cx = Math.floor(x), cy = Math.floor(y);
+        if (cy > 0 && isOpen((cy - 1) * W + cx)) Py[p] = y - 1;
+        if (Pvy[p] > 0) Pvy[p] = -0.05;
+        p++;
+        continue;
+      }
+      if (landed) {
+        if (hitCell >= 0 && STAIN_P[Pt[p]]) splatter(hitCell, Pt[p], svx, svy, Math.hypot(svx, svy));   // spatter
+        // land where it is, or in the nearest open cell around it (rings outward; never climbing up a column)
+        const x0 = Math.min(W - 1, Math.max(0, Math.floor(x))), y0 = Math.min(H - 1, Math.floor(y));
+        let j = isOpen(y0 * W + x0) ? y0 * W + x0 : -1;
+        for (let r = 1; r <= 12 && j < 0; r++) {
+          const flip = rnd() < 0.5 ? 1 : -1;
+          for (let dy = -r; dy <= r && j < 0; dy++) {
+            const span = r - Math.abs(dy);                  // diamond ring: |dx| + |dy| = r
+            for (let s2 = 0; s2 < 2 && j < 0; s2++) {
+              const dx = (s2 ? -span : span) * flip;
+              if (s2 && span === 0) break;
+              const cx = x0 + dx, cy = y0 + dy;
+              if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+              const q = cy * W + cx;
+              if (isOpen(q)) j = q;
+            }
+          }
+        }
+        if (j < 0 && lastOpen >= 0 && isOpen(lastOpen)) j = lastOpen;   // back where it last had room
+        if (j < 0) {                                                       // last resort: first open cell above
+          for (let cy = y0; cy >= 0; cy--) { const q = cy * W + x0; if (isOpen(q)) { j = q; break; } if (!MOVABLE[type[q]]) break; }
+        }
+        if (j >= 0) {
+          set(j, Pt[p]); shade[j] = Ps[p]; mxT[j] = Pmt[p]; mxA[j] = Pma[p];
+          if (Pt[p] === EMBER) burn[j] = 150 + ((rnd() * 250) | 0);
+          fvx[j] = svx; fvy[j] = svy; plg[j] = 254;        // a splash droplet: lands carrying its speed, but throws no new crown
+          vx[j] = svx > 0.2 ? 1 : svx < -0.2 ? -1 : 0;
+        }
+        pc--;
+        Px[p] = Px[pc]; Py[p] = Py[pc]; Pvx[p] = Pvx[pc]; Pvy[p] = Pvy[pc]; Pt[p] = Pt[pc]; Ps[p] = Ps[pc];
+        Pmt[p] = Pmt[pc]; Pma[p] = Pma[pc];
+        continue;
+      }
+      p++;
+    }
+  }
+  function randNeighbor(i, x, y) {
+    const dx = ((rnd() * 3) | 0) - 1, dy = ((rnd() * 3) | 0) - 1;
+    if (!dx && !dy) return -1;
+    const nx = x + dx, ny = y + dy;
+    if (nx < 0 || nx >= W || ny < 0 || ny >= H) return -1;
+    return i + dy * W + dx;
+  }
+  function hasAir(i) {
+    const x = i % W;
+    return (i >= W && isOpen(i - W)) || (i < N - W && isOpen(i + W)) || (x > 0 && isOpen(i - 1)) || (x < W - 1 && isOpen(i + 1));
+  }
+  // can this cell get the air it needs to burn? Solids and powders need to touch open air;
+  // a flammable liquid can burn up to burnDepth layers below the surface of its pool
+  function airReach(i, t) {
+    if (hasAir(i)) return true;
+    const depth = BDEPTH[t];
+    if (depth <= 1 || KIND[t] !== K_LIQUID) return false;
+    // layer n has open air n cells straight above it, through nothing but the same liquid
+    for (let k = i - W, n = 1; k >= 0 && n <= depth; k -= W, n++) {
+      if (isOpen(k)) return true;
+      if (type[k] !== t) return false;
+    }
+    return false;
+  }
+  function startBurn(j) {
+    const t = type[j];
+    if (!FUELED[t] || burn[j]) return;
+    burn[j] = FUEL0[t] + ((rnd() * (FUEL1[t] - FUEL0[t])) | 0);
+  }
+  // tallow off the ground (falling, pouring, a droplet that just landed) burns all at once
+  function airborne(i, t) {
+    return t === TALLOW && (fvy[i] >= 0.5 || (i < N - W && isOpen(i + W)));
+  }
+
+  // ---------- update rules ----------
+  function canEnter(d, j) { const tt = type[j]; return MOVABLE[tt] && DENS[tt] < d; }
+
+  // Accelerating fall. Sets fallTo (where the cell ended up) and impact (speed it hit something at, 0 if still falling).
+  let fallTo = 0, impact = 0;
+  function fall(i, x, t) {
+    const d = DENS[t], liquid = KIND[t] === K_LIQUID;
+    let v = vy[i] + 1; if (v > MAXV) v = MAXV;
+    const steps = v;
+    let m = v;                 // momentum left; liquids it plunges through eat it away
+    // already submerged (liquid above us)? then there's no surface left to splash
+    let cur = i, n = 0, hit = false, entered = i >= W && KIND[type[i - W]] === K_LIQUID;
+    while (n < steps) {
+      const b = cur + W;
+      if (b >= N) { hit = true; break; }
+      const tt = type[b];
+      if (!MOVABLE[tt]) { hit = true; break; }
+
+      if (KIND[tt] === K_LIQUID) {
+        if (!liquid && m < 2 && rnd() < 0.45) break;                      // powders sink slowly once slowed
+        if (!entered) {
+          entered = true;
+          if (m >= 3) crown(b, x, m);                                     // breaking the surface throws liquid up
+        }
+        // the liquid we plough into gets shoved aside (it swaps up behind us)
+        fvx[b] += (rnd() < 0.5 ? -1 : 1) * m * (0.2 + rnd() * 0.3); fvy[b] -= m * 0.1;
+        const tb = type[b];
+        if (tb !== EMPTY && !(MOVABLE[tb] && KIND[tb] !== K_STATIC)) { hit = true; break; }
+        swap(cur, b); cur = b; n++;
+        // drag: thicker and denser liquids stop a plunge sooner; powders plough through less
+        let drag = 0.8 + VISC[tt] * 5;
+        if (DENS[tt] > d) drag += (DENS[tt] - d) * 8;
+        if (!liquid) drag += 0.6;
+        m -= drag;
+        if (m <= 0) { m = 0; break; }
+        continue;
+      }
+
+      if (DENS[tt] >= d) {
+        if (vy[b] > 0) { m = Math.min(m, vy[b]); break; }
+        hit = true; break;
+      }
+      swap(cur, b); cur = b; n++;
+    }
+    fallTo = cur; impact = hit ? Math.round(m) : 0;
+    vy[cur] = hit ? 0 : Math.max(0, Math.min(MAXV, Math.floor(m)));
+    return n;
+  }
+
+  // ---------- collapsing ground (after FallingSandSurvival's physicsCheck) ----------
+  // Whenever solid ground is removed, the solid around the cut is flood-filled. If that patch no longer connects to
+  // bedrock or the edge of the world, it breaks off: small crumbs fall as loose material, bigger pieces fall as one
+  // chunk that keeps its shape, pushes through liquid, crushes anyone under it, and shatters its leading edge on a hard landing.
+  const COLLAPSE = { maxRegion: 2400, crumb: 8, maxBodies: 40, every: 3, gravity: 0.18, shatter: 2.5 };
+  const LOOSE = new Uint8Array(T);
+  LOOSE[EARTH] = DIRT; LOOSE[STONE] = RUBBLE; LOOSE[BONE] = BONEBIT;
+  const fillMark = new Uint32Array(N); let fillStamp = 1;
+  const regionBuf = new Int32Array(COLLAPSE.maxRegion + 8), stackBuf = new Int32Array(N);
+  const bodies = []; let nextBodyId = 1;
+  function holdsTogether(t) { return KIND[t] === K_STATIC && t !== BEDROCK; }
+  function floodRegion(start) {
+    let sp = 0, n = 0;
+    stackBuf[sp++] = start; fillMark[start] = fillStamp;
+    while (sp) {
+      const q = stackBuf[--sp];
+      if (n >= COLLAPSE.maxRegion) return -1;                     // too big to be loose: treat it as part of the world
+      regionBuf[n++] = q;
+      const x = q % W, y = (q / W) | 0;
+      if (x === 0 || x === W - 1 || y === H - 1) return -1;       // the edge of the world holds it up
+      for (let k = 0; k < 4; k++) {
+        const nb = k === 0 ? q - W : k === 1 ? q + W : k === 2 ? (x > 0 ? q - 1 : -1) : (x < W - 1 ? q + 1 : -1);
+        if (nb < 0 || nb >= N) continue;
+        const tn = type[nb];
+        if (tn === BEDROCK || KIND[tn] === K_SPOUT) return -1;    // anchored
+        if (holdsTogether(tn) && fillMark[nb] !== fillStamp && (!bodyOf[nb] || bodyOf[nb] === bodyOf[start])) { fillMark[nb] = fillStamp; stackBuf[sp++] = nb; }
+      }
+    }
+    return n;
+  }
+  function processCollapse() {
+    if (!collapseSeeds.length) return;
+    fillStamp = fillStamp >= 4294967295 ? 1 : fillStamp + 1;
+    const seeds = collapseSeeds.splice(0, 600);
+    for (const sd of seeds) {
+      const sx = sd % W;
+      for (let k = 0; k < 4; k++) {
+        const j = k === 0 ? sd - W : k === 1 ? sd + W : k === 2 ? (sx > 0 ? sd - 1 : -1) : (sx < W - 1 ? sd + 1 : -1);
+        if (j < 0 || j >= N || !holdsTogether(type[j]) || bodyOf[j] || fillMark[j] === fillStamp) continue;
+        const n = floodRegion(j);
+        if (n > 0) breakLoose(n);
+      }
+    }
+  }
+  function breakLoose(n) {
+    if (n <= COLLAPSE.crumb) {                                   // a crumb: it just falls apart
+      for (let k = 0; k < n; k++) { const q = regionBuf[k], lt = LOOSE[type[q]]; if (lt) { const sh = shade[q]; set(q, lt); shade[q] = sh; } }
+      let solidLeft = 0; for (let k = 0; k < n; k++) if (holdsTogether(type[regionBuf[k]])) solidLeft++;
+      if (!solidLeft) return;
+    }
+    if (bodies.length >= COLLAPSE.maxBodies) return;
+    const id = nextBodyId; nextBodyId = nextBodyId >= 65535 ? 1 : nextBodyId + 1;
+    const cells = [];
+    for (let k = 0; k < n; k++) { const q = regionBuf[k]; if (holdsTogether(type[q])) { bodyOf[q] = id; cells.push(q); } }
+    if (!cells.length) return;
+    bodies.push({ id, cells, vy: 0, acc: 0, fell: 0, wait: 0 });
+  }
+  // A chunk moves column by column: in each column it spans, everything from its top cell to its bottom cell
+  // shifts down together, so whatever is inside it (a coffin's occupant, a pocket of blood) rides along.
+  function columnsOf(b) {
+    const cols = new Map();
+    for (const q of b.cells) {
+      const x = q % W, y = (q / W) | 0, c = cols.get(x);
+      if (!c) cols.set(x, { lo: y, hi: y }); else { if (y < c.lo) c.lo = y; if (y > c.hi) c.hi = y; }
+    }
+    return cols;
+  }
+  // can this chunk move down one cell? 1 = yes, 0 = it has landed, 2 = waiting on another falling chunk
+  function canDrop(b, cols) {
+    for (const [x, c] of cols) {
+      for (let y = c.lo + 1; y < c.hi; y++) {                    // something of the world caught inside it: it's hooked on
+        const q = y * W + x;
+        if (bodyOf[q] === b.id) continue;
+        if (bodyOf[q]) return 2;
+        if (KIND[type[q]] === K_STATIC || KIND[type[q]] === K_SPOUT) return 0;
+      }
+      const below = (c.hi + 1) * W + x;
+      if (below >= N) return 0;
+      if (bodyOf[below]) return 2;
+      const tb = type[below];
+      if (!(isOpen(below) || KIND[tb] === K_LIQUID)) return 0;
+      if (crushAt(x, c.hi + 1, b.vy)) return 0;                 // someone in the way
+    }
+    return 1;
+  }
+  function dropOne(b, cols) {
+    for (const [x, c] of cols) {
+      for (let y = c.hi; y >= c.lo; y--) swap(y * W + x, (y + 1) * W + x);
+      c.lo++; c.hi++;
+    }
+    for (let k = 0; k < b.cells.length; k++) b.cells[k] += W;
+  }
+  function land(b) {
+    const v = b.vy;
+    if (v >= COLLAPSE.shatter) {                                 // a hard landing: the leading edge shatters
+      const chance = Math.min(0.85, (v - COLLAPSE.shatter + 0.6) * 0.22);
+      for (const q of b.cells) {
+        if ((q + W < N && bodyOf[q + W] === b.id) || rnd() > chance) continue;
+        const t = type[q], lt = LOOSE[t] || (t === WOOD ? ASH : 0);
+        if (!lt) continue;
+        const sh = shade[q]; set(q, lt); shade[q] = sh;
+        if (rnd() < 0.5) {
+          const bb = t * 12 + (sh >> 6) * 3, qx = q % W, qy = (q / W) | 0;
+          fx.push({ x: qx + 0.5, y: qy + 0.5, vx: (rnd() - 0.5) * 1.6, vy: -0.4 - rnd() * 0.9, life: 18 + ((rnd() * 16) | 0), max: 34,
+                    r: PAL_RGB[bb], g: PAL_RGB[bb + 1], bl: PAL_RGB[bb + 2], glow: false });
+        }
+      }
+    }
+    for (const q of b.cells) if (bodyOf[q] === b.id) bodyOf[q] = 0;
+  }
+  function stepBodies() {
+    for (let k = bodies.length - 1; k >= 0; k--) {
+      const b = bodies[k];
+      b.cells = b.cells.filter(q => bodyOf[q] === b.id);          // anything dug or burned off it is no longer part of it
+      if (!b.cells.length) { bodies.splice(k, 1); continue; }
+      b.vy = Math.min(MAXV, b.vy + COLLAPSE.gravity);
+      b.acc += b.vy;
+      let steps = Math.floor(b.acc); b.acc -= steps;
+      let done = false;
+      const cols = steps > 0 ? columnsOf(b) : null;
+      while (steps-- > 0) {
+        const c = canDrop(b, cols);
+        if (c === 1) { dropOne(b, cols); b.fell++; continue; }
+        if (c === 2) { b.vy = Math.min(b.vy, 1); b.acc = 0; if (++b.wait > 240) { land(b); done = true; } break; }
+        land(b); done = true; break;
+      }
+      if (done) bodies.splice(k, 1);
+    }
+  }
+
+  // ---------- forces: wind and push/pull fields ----------
+  // Effects write a push vector into the field each tick (cells per tick, roughly); anything that can move
+  // feels it in proportion to how light it is. The field is cleared after every step.
+  // windGlobal is a steady breeze that reaches gases, flames, droplets and the exposed surface.
+  const windX = new Float32Array(N), windY = new Float32Array(N);
+  let windGlobal = 0;
+  const RESP = new Float32Array(T);
+  for (let t = 0; t < T; t++) { const k = KIND[t]; RESP[t] = k === K_GAS ? 1 : k === K_FIRE ? 1 : 0; }
+  RESP[ASH] = 0.9; RESP[EMBER] = 0.7;
+  RESP[HOLY] = 0.55; RESP[BLOOD] = 0.5; RESP[TALLOW] = 0.45; RESP[ICHOR] = 0.2;
+  RESP[FLESH] = 0.35; RESP[BONEBIT] = 0.3; RESP[DIRT] = 0.2; RESP[MUD] = 0.12; RESP[RUBBLE] = 0.12;
+  const RESP_DROPLET = 0.5;
+
+  // add a pull toward (px, py) felt within `radius` of (cx, cy); negative strength pushes away
+  function addPull(cx, cy, radius, px, py, strength, lift) {
+    const RI = Math.ceil(radius);
+    for (let oy = -RI; oy <= RI; oy++) for (let ox = -RI; ox <= RI; ox++) {
+      const d = Math.hypot(ox, oy); if (d > radius) continue;
+      const x = Math.floor(cx) + ox, y = Math.floor(cy) + oy;
+      if (x < 0 || x >= W || y < 0 || y >= H) continue;
+      const q = y * W + x, f = strength * (1 - d / radius);
+      let dx = px - (x + 0.5), dy = py - (y + 0.5);
+      const L = Math.hypot(dx, dy) || 1;
+      windX[q] += dx / L * f;
+      windY[q] += dy / L * f - (lift || 0) * f;
+    }
+  }
+  function forceOn(i, y, t) {
+    let fx = windX[i], fy = windY[i];
+    if (windGlobal) {
+      const k = KIND[t];
+      if (k === K_GAS || k === K_FIRE) fx += windGlobal;
+      else if (y > 0 && isOpen(i - W)) fx += windGlobal * 0.6;      // only the exposed surface feels the breeze
+    }
+    return [fx, fy];
+  }
+  // returns true if the force moved (or lifted) the cell this tick
+  function applyForce(i, x, y, t) {
+    const r = RESP[t]; if (!r) return false;
+    const [fx, fy] = forceOn(i, y, t);
+    if (!fx && !fy) return false;
+    const m = Math.hypot(fx, fy) * r;
+    if (m < 0.04 || rnd() > m) return false;
+    // liquid pulled up hard enough leaves the ground as droplets carried by the pull
+    if (KIND[t] === K_LIQUID && fy < -0.15 && y > 0 && isOpen(i - W) && rnd() < 0.5) {
+      return launch(i, fx * 3, fy * 3 - 0.3);
+    }
+    const sx = fx > 0.02 ? 1 : fx < -0.02 ? -1 : 0, sy = fy > 0.02 ? 1 : fy < -0.02 ? -1 : 0;
+    const order = Math.abs(fx) >= Math.abs(fy) ? [[sx, sy], [sx, 0], [0, sy]] : [[sx, sy], [0, sy], [sx, 0]];
+    const d = DENS[t];
+    for (const [dx, dy] of order) {
+      if (!dx && !dy) continue;
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      const j = ny * W + nx, tj = type[j];
+      if (isOpen(j) || (KIND[t] !== K_GAS && KIND[t] !== K_FIRE && KIND[tj] === K_LIQUID && DENS[tj] < d)) {
+        swap(i, j); vx[j] = dx || vx[j]; mov[j] = 1;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Inertia (after FallingSandSurvival and Noita): a grain is either moving or resting. Falling grains are moving;
+  // a moving grain that lands slides off diagonally, and each tick has a chance (its friction) to come to rest.
+  // A resting grain stays put, even on a slope, until something disturbs it: the grain under it falls away,
+  // a neighbour slides past, a hole opens beside it, or a force shoves it. Grippy materials pile steep; ash avalanches.
+  const FRIC = new Float32Array(T).fill(0.08);
+  FRIC[DIRT] = 0.1; FRIC[RUBBLE] = 0.14; FRIC[BONEBIT] = 0.11; FRIC[ASH] = 0.015; FRIC[EMBER] = 0.03;
+  FRIC[FLESH] = 0.55; FRIC[MUD] = 0.6;
+  const SKID = new Float32Array(T); SKID[ASH] = 0.55; SKID[EMBER] = 0.3;   // fine stuff skids sideways off a slope, so it lies flatter
+  function wakeAbove(i) {
+    const x0 = i % W;
+    if (i < W) return;
+    if (rnd() < 0.7) mov[i - W] = 1;
+    if (x0 > 0 && rnd() < 0.45) mov[i - W - 1] = 1;
+    if (x0 < W - 1 && rnd() < 0.45) mov[i - W + 1] = 1;
+  }
+  function updPowder(i, x, y, t) {
+    const n = fall(i, x, t);
+    if (n > 0) {                                      // it fell: whatever it was holding up is disturbed
+      mov[fallTo] = 1; wakeAbove(i);
+      if (impact) {                                   // and where it lands, it knocks the grains beneath it loose
+        const lx = fallTo % W, lb = fallTo + W;
+        if (lb < N) {
+          if (rnd() < 0.85) mov[lb] = 1;
+          if (lx > 0 && rnd() < 0.6) mov[lb - 1] = 1;
+          if (lx < W - 1 && rnd() < 0.6) mov[lb + 1] = 1;
+        }
+      }
+      return;
+    }
+    if (fallTo >= N - W) { mov[i] = 0; return; }
+    if (!mov[i]) return;                              // at rest: stays put until disturbed
+    if (rnd() < FRIC[t]) { mov[i] = 0; return; }      // friction brings it to rest
+    const d = DENS[t], b = i + W;
+    if (t === FLESH && rnd() > 0.12) return;        // flesh slumps, barely slides
+    if (t === MUD && rnd() > 0.35) return;          // mud is sluggish
+    const s = rnd() < 0.5 ? -1 : 1;
+    for (let k = 0; k < 2; k++) {
+      const dx = k ? -s : s, nx = x + dx;
+      if (nx < 0 || nx >= W) continue;
+      if (canEnter(d, b + dx) && canEnter(d, i + dx)) {
+        swap(i, b + dx);
+        wakeAbove(i);                                 // sliding away disturbs the grains it was propping up
+        if (rnd() < 0.5) mov[i + dx] = 1;              // and jostles the one beside it
+        return;
+      }
+    }
+    if (SKID[t] && rnd() < SKID[t]) {                // fine powders skid along before they stop
+      const nx = x + s;
+      if (nx >= 0 && nx < W && canEnter(d, i + s) && (b + s >= N || !canEnter(d, b + s) || true)) { swap(i, i + s); wakeAbove(i); return; }
+    }
+    mov[i] = 0;                                       // nowhere to go: it settles
+  }
+
+  function updLiquid(i, x, y, t) {
+    {
+      const nj = randNeighbor(i, x, y);
+      if (nj >= 0) {
+        if (KIND[type[nj]] === K_LIQUID) mixCells(i, nj);
+        else if (STAIN_P[t]) stainAt(nj, t);
+      }
+      t = type[i];   // mixing can flip which liquid dominates this cell
+    }
+    // reactions
+    if (t === BLOOD || t === ICHOR) {
+      const j = randNeighbor(i, x, y);
+      if (j >= 0) {
+        const tt = type[j];
+        if (t === BLOOD && tt === DIRT && rnd() < 0.005) { set(j, MUD); set(i, EMPTY); return; }
+        if (t === ICHOR) {
+          if (tt === FLESH && rnd() < 0.02) { set(j, MIASMA); if (rnd() < 0.15) { set(i, EMPTY); return; } }
+          else if (tt === HOLY && rnd() < 0.3) { set(j, STEAM); set(i, STEAM); return; }
+        }
+      }
+    }
+    const d = DENS[t];
+
+    // ---------- 1. falling (accelerates; plunges into resting pools when it arrives fast) ----------
+    if (y < H - 1) {
+      let v = fvy[i] + G_LIQ;
+      if (v < 1) v = 1;
+      if (v > MAXV) v = MAXV;
+      const steps = Math.floor(v);
+      let cur = i, cx = x, moved = 0, landed = false, waiting = false, spray = false;
+      for (let s = 0; s < steps; s++) {
+        const b = cur + W;
+        if (b >= N) { landed = true; break; }
+        const tb = type[b];
+        if (isOpen(b)) { swap(cur, b); cur = b; moved++; if (plg[cur] < 254) plg[cur] = 255; continue; }   // free fall
+        if (KIND[tb] === K_LIQUID) {
+          if (fvy[b] >= 0.5) {
+            // it's only really falling if it moved this tick (rows below update first); otherwise its speed is stale
+            // wait only behind liquid that is still in the air; one already plunging into the pool is just pool to us
+            if (stamp[b] === frame && plg[b] >= 254) { if (v > fvy[b] + 1) v = fvy[b] + 1; waiting = true; break; }
+            if (plg[b] === 0 || plg[b] >= 254) fvy[b] = 0;
+          }
+          // arriving from the air fast enough: break the surface, then drive down through the pool
+          if (plg[cur] >= 254) {
+            const fromSplash = plg[cur] === 254;
+            spray = !fromSplash;
+            plg[cur] = 0;
+            if (v >= 2) {
+              if (!fromSplash) crown(b, cx, v);   // only fresh falls throw a crown, so splashes die out instead of feeding themselves
+              plg[cur] = Math.min(250, Math.round(v * (fromSplash ? 1.2 : 2.6) * (1 - VISC[tb]) * Math.min(1.4, d / DENS[tb])));
+            }
+          }
+          if (plg[cur] > 0 && plg[cur] < 254) {
+            plg[cur]--;
+            plungeThrough(cur, b, cx, v, spray);
+            cur = b; moved++;
+            v *= 1 - Math.min(0.5, 0.04 + VISC[tb] * 0.6);
+            if (v < 1) { v = 0; plg[cur] = 0; break; }
+            continue;
+          }
+          if (DENS[tb] < d) { swap(cur, b); cur = b; moved++; v = 1; break; }       // heavier sinks through lighter
+          landed = true; break;
+        }
+        landed = true; break;                                                       // solid or powder
+      }
+      if (landed) {
+        const hit = v, wasDrop = plg[cur] === 254;
+        if (hit >= 1.5 && STAIN_P[t] && cur + W < N) splatter(cur + W, t, fvx[cur] * 0.3, hit, hit);
+        fvy[cur] = 0; plg[cur] = 0;
+        // a hard landing on something solid splats sideways, sometimes throwing a droplet
+        if (hit >= 3 && !wasDrop && cur >= W && isOpen(cur - W) && cur + W < N && KIND[type[cur + W]] !== K_LIQUID) {
+          const s = SPL[t];
+          if (rnd() < s * 0.3) { launch(cur, (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 1.4) * s, -hit * (0.12 + rnd() * 0.15) * s); return; }
+          fvx[cur] = (rnd() < 0.5 ? -1 : 1) * hit * 0.6;                            // extra spread on the next flow
+        }
+        if (moved) return;
+      } else if (moved || waiting) {
+        fvy[cur] = v;
+        return;
+      } else {
+        fvy[i] = 0;
+      }
+    }
+
+    // ---------- 2. resting: Noita-style flow — every cell, every tick ----------
+    if (VISC[t] && rnd() < VISC[t]) return;                 // thick liquids spread sluggishly
+    // slip diagonally down (into open air, or through a lighter liquid)
+    if (y < H - 1) {
+      const b = i + W, s = vx[i] || (rnd() < 0.5 ? -1 : 1);
+      for (let k = 0; k < 2; k++) {
+        const dx = k ? -s : s, nx = x + dx;
+        if (nx < 0 || nx >= W) continue;
+        if (canEnter(d, b + dx) && canEnter(d, i + dx)) { swap(i, b + dx); vx[b + dx] = dx; return; }
+      }
+    }
+    // spread sideways; a fresh splat or landing droplet carries extra reach
+    let boost = 0;
+    if (fvx[i]) { boost = Math.round(Math.abs(fvx[i])); if (!vx[i]) vx[i] = fvx[i] > 0 ? 1 : -1; fvx[i] = 0; }
+    let dir = vx[i] || (rnd() < 0.5 ? -1 : 1);
+    if (rnd() < 0.02) dir = -dir;
+    const dist = DISP[t] + boost;
+    if (flow(i, x, dir, dist, d) < 0) {
+      dir = -dir;
+      if (flow(i, x, dir, dist, d) < 0) vx[i] = dir;
+    }
+  }
+
+  // A plunging cell at `cur` drives into liquid cell `b` below it. The liquid it displaces gets shoved
+  // out of the way: thrown up out of the surface if it's near the top, otherwise pushed aside or up behind.
+  function plungeThrough(cur, b, x, v, spray) {
+    const s = SPL[type[b]];
+    const nearTop = cur >= W && isOpen(cur - W);
+    if (spray && nearTop && rnd() < 0.55 * s) {
+      // displaced liquid sprays up and out of the hole
+      const side = rnd() < 0.5 ? -1 : 1;
+      if (launch(b, side * (0.4 + rnd() * 1.2) * v * 0.25, -v * (0.25 + rnd() * 0.3) * s)) { swap(cur, b); return; }
+    }
+    // shove it sideways if there's room beside it
+    const side = rnd() < 0.5 ? -1 : 1, bx = x;
+    for (let k = 0; k < 2; k++) {
+      const dx = k ? -side : side, nx = bx + dx;
+      if (nx < 0 || nx >= W) continue;
+      const q = b + dx;
+      if (isOpen(q)) { swap(b, q); vx[q] = dx; fvx[q] = dx * v * 0.5; swap(cur, b); return; }
+    }
+    // breaking the surface: what it pushes out spills onto the surface beside the hole, never stacking
+    // up in the hole itself (otherwise a steady stream builds a column above the pool)
+    if (nearTop) {
+      for (let r = 1; r <= 4; r++) {
+        for (let k = 0; k < 2; k++) {
+          const dx = (k ? -side : side) * r, nx = bx + dx;
+          if (nx < 0 || nx >= W) continue;
+          const q = cur + dx;
+          if (isOpen(q)) {
+            swap(b, q); vx[q] = dx > 0 ? 1 : -1; fvx[q] = (dx > 0 ? 1 : -1) * (2 + v * 0.4);
+            swap(cur, b); return;
+          }
+        }
+      }
+    }
+    swap(cur, b);
+    vx[cur] = side; fvx[cur] = side * v * 0.4;     // the displaced cell (now above us) carries a sideways push
+  }
+
+  // Move cell i up to `dist` cells sideways through open space. Stops at the first lighter liquid
+  // (displacing it) and at a ledge (so it pours over). Returns the new index, or -1 if it couldn't move.
+  function flow(i, x, dir, dist, d) {
+    let last = -1;
+    for (let k = 1; k <= dist; k++) {
+      const nx = x + dir * k; if (nx < 0 || nx >= W) break;
+      const j = i + dir * k, tt = type[j];
+      if (!MOVABLE[tt] || DENS[tt] >= d) break;
+      last = j;
+      if (KIND[tt] === K_LIQUID) break;
+      if (j + W < N && canEnter(d, j + W)) break;
+    }
+    if (last < 0) return -1;
+    swap(i, last); vx[last] = dir;
+    return last;
+  }
+
+  function updGas(i, x, y, t) {
+    if (--life[i] <= 0) { set(i, (t === STEAM && rnd() < 0.2) ? HOLY : EMPTY); return; }
+    if (rnd() > DEF[t].rise) return;
+    const d = DENS[t], dx = ((rnd() * 3) | 0) - 1, nx = x + dx;
+    if (y > 0 && nx >= 0 && nx < W) {
+      const j = i - W + dx, tt = type[j];
+      if (tt === EMPTY || ((KIND[tt] === K_GAS || KIND[tt] === K_LIQUID) && DENS[tt] > d)) { swap(i, j); return; }
+    }
+    const sx = x + (rnd() < 0.5 ? -1 : 1);
+    if (sx >= 0 && sx < W && type[i - x + sx] === EMPTY) swap(i, i - x + sx);
+  }
+
+  function updFire(i, x, y) {
+    heat[i] += 5;                                         // flames heat the air they're in
+    // doused by liquid
+    const j = randNeighbor(i, x, y);
+    if (j >= 0) {
+      const tt = type[j];
+      if (tt === HOLY) { if (rnd() < 0.3) set(j, STEAM); set(i, STEAM); heat[i] *= 0.5; return; }
+      if (tt === BLOOD || tt === ICHOR) { set(i, SMOKE); heat[i] *= 0.6; return; }
+    }
+    if (--life[i] <= 0) { set(i, rnd() < 0.3 ? SMOKE : EMPTY); return; }
+    // rise and lick about
+    if (y > 0 && rnd() < 0.75) {
+      const dx = ((rnd() * 3) | 0) - 1, nx = x + dx;
+      if (nx >= 0 && nx < W) {
+        const k = i - W + dx, tt = type[k];
+        if (tt === EMPTY || KIND[tt] === K_GAS) swap(i, k);
+      }
+    }
+  }
+
+  // throw a flame into open air next to a burning cell, preferring straight up; hotter fires throw taller flames
+  function emitFlame(i, x, y, big) {
+    const h = heat[i];
+    const opts = [i - W, i - W - 1, i - W + 1, i - 1, i + 1];
+    const start = (rnd() * 3) | 0;
+    for (let n = 0; n < 5; n++) {
+      const k = n < 3 ? opts[(start + n) % 3] : opts[n];
+      const kx = k % W;
+      if (k < 0 || k >= N || Math.abs(kx - x) > 1) continue;
+      if (type[k] === EMPTY || KIND[type[k]] === K_GAS) {
+        const extra = Math.min(26, h * 0.5) + (big ? 10 : 0);
+        setFlame(k, 6 + extra * 0.5, 14 + extra);
+        return;
+      }
+    }
+  }
+
+  // A cell that is burning keeps its material (wood stays wood) while its fuel runs down.
+  // Returns true if the cell turned into something else this tick.
+  function updBurning(i, x, y, t) {
+    // quenched by water or blood touching it
+    for (let n = 0; n < 2; n++) {
+      const j = randNeighbor(i, x, y);
+      if (j < 0) continue;
+      const tt = type[j];
+      // burning fat floats: liquid underneath it doesn't put it out, only liquid splashed over or beside it
+      if (t === TALLOW && j > i + 1) continue;
+      if ((tt === HOLY || tt === BLOOD) && rnd() < 0.35) {
+        burn[i] = 0; heat[i] *= 0.3;
+        if (tt === HOLY && rnd() < 0.4) set(j, STEAM);
+        return false;
+      }
+    }
+    // fire needs air: tallow too deep in its pool goes out, wood/flesh smoulder without burning down
+    if (!airReach(i, t)) {
+      if (t === TALLOW) burn[i] = 0;
+      return false;
+    }
+    const air = airborne(i, t);
+    const rate = air ? DEF[TALLOW].fire.airBurn : 1;
+    // a burning cell heats itself and, directly, everything touching it (more burning neighbours = faster spread)
+    const bh = BHEAT[t] * (air ? 3 : 1);
+    heat[i] += bh;
+    if (y > 0) heat[i - W] += bh * 0.7;
+    if (x > 0) heat[i - 1] += bh * 0.45;
+    if (x < W - 1) heat[i + 1] += bh * 0.45;
+    if (y < H - 1) heat[i + W] += bh * (KIND[t] === K_LIQUID ? 0.9 : 0.3);   // a burning pool heats the fat right under it
+    burn[i] = burn[i] > rate ? burn[i] - rate : 0;
+    if (rnd() < FLAMEP[t] * (air ? 4 : 1) * (1 + heat[i] / 30)) emitFlame(i, x, y, air);
+    if (y > 0 && rnd() < 0.01 && type[i - W] === EMPTY) set(i - W, SMOKE);
+
+    if (t === WOOD) {
+      // pieces break away as it burns: undersides drop off, and anything barely attached falls
+      let attached = 0;
+      if (y > 0 && type[i - W] === WOOD) attached++;
+      if (y < H - 1 && type[i + W] === WOOD) attached++;
+      if (x > 0 && type[i - 1] === WOOD) attached++;
+      if (x < W - 1 && type[i + 1] === WOOD) attached++;
+      const loose = y < H - 1 && isOpen(i + W) && (attached <= 1 ? 0.015 : 0.005);
+      if (loose && rnd() < loose) {
+        type[i] = EMBER; burn[i] = Math.min(burn[i], 120 + ((rnd() * 200) | 0)); stamp[i] = frame;
+        return true;
+      }
+      // and every so often an ember pops out of the fire and arcs away
+      if (y > 0 && rnd() < 0.0025 && type[i - W] === EMPTY) {
+        set(i - W, EMBER);
+        if (!launch(i - W, (rnd() * 2 - 1) * 1.2, -(0.8 + rnd() * 1.6))) set(i - W, EMPTY);
+      }
+    }
+    // burning flesh renders down: fat drips out of it
+    if (t === FLESH && rnd() < 0.004) {
+      for (const k of [i + W, i - 1, i + 1]) {
+        if (k >= 0 && k < N && type[k] === EMPTY && Math.abs((k % W) - x) <= 1) { set(k, TALLOW); break; }
+      }
+    }
+    if (burn[i] === 0) {
+      const r = rnd();
+      if (t === WOOD) {
+        if (r < 0.3) { type[i] = EMBER; burn[i] = 200 + ((rnd() * 280) | 0); stamp[i] = frame; }
+        else set(i, r < 0.6 ? ASH : (r < 0.8 ? SMOKE : EMPTY));
+      } else if (t === FLESH) set(i, r < 0.12 ? ASH : (r < 0.5 ? SMOKE : EMPTY));
+      else if (t === EMBER) set(i, r < 0.6 ? ASH : EMPTY);
+      else set(i, r < 0.35 ? SMOKE : EMPTY);
+      return true;
+    }
+    return false;
+  }
+
+  // ---------- heat ----------
+  // Heat soaks into whatever is there, spreads to neighbours (mostly upward: hot air rises), and cools off.
+  // Air carries heat freely; solids and liquids take it in slowly; water and blood soak it up and cool fast.
+  const COND = new Float32Array(T), COOL = new Float32Array(T), SPREAD = new Float32Array(T);
+  for (let t = 0; t < T; t++) {
+    const k = KIND[t];
+    SPREAD[t] = k === K_STATIC ? 0.12 : k === K_POWDER ? 0.15 : k === K_LIQUID ? 0.2 : 0.4;   // share passed on per tick
+    COND[t] = k === K_STATIC ? 0.35 : k === K_POWDER ? 0.3 : k === K_LIQUID ? 0.25 : k === K_SPOUT ? 0.2 : 1;
+    COOL[t] = k === K_STATIC ? 0.012 : k === K_POWDER ? 0.02 : k === K_LIQUID ? 0.1 : 0.045;
+  }
+  COND[TALLOW] = 0.3; COOL[TALLOW] = 0.03;
+  COND[STONE] = 0.2;
+
+  function airHeat(i) {
+    const x = i % W;
+    let m = 0;
+    if (i >= W && isOpen(i - W) && heat2[i - W] > m) m = heat2[i - W];
+    if (i < N - W && isOpen(i + W) && heat2[i + W] > m) m = heat2[i + W];
+    if (x > 0 && isOpen(i - 1) && heat2[i - 1] > m) m = heat2[i - 1];
+    if (x < W - 1 && isOpen(i + 1) && heat2[i + 1] > m) m = heat2[i + 1];
+    return m;
+  }
+  function heatStep() {
+    heat2.fill(0);
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = row + x, h = heat[i];
+        if (h < 0.02) continue;
+        const out = h * SPREAD[type[i]];
+        heat2[i] += h - out - h * COOL[type[i]];
+        if (y > 0)     heat2[i - W] += out * 0.5 * COND[type[i - W]];
+        if (x > 0)     heat2[i - 1] += out * 0.18 * COND[type[i - 1]];
+        if (x < W - 1) heat2[i + 1] += out * 0.18 * COND[type[i + 1]];
+        if (y < H - 1) heat2[i + W] += out * 0.14 * COND[type[i + W]];
+      }
+    }
+    // swap buffers, then let heat do its work
+    for (let i = 0; i < N; i++) {
+      const h = heat2[i];
+      heat[i] = h;
+      const t = type[i];
+      if (h < 1 && !FUELED[t]) continue;
+      if (FUELED[t]) {
+        if (burn[i] || t === EMBER) continue;
+        const ign = airborne(i, t) ? DEF[TALLOW].fire.airIgn : IGN[t];
+        // a surface catches from the hot air touching it as well as from heat soaked into it
+        const e = Math.max(h, airHeat(i) * 0.8);
+        if (e > ign && airReach(i, t) && rnd() < Math.min(0.25, (e - ign) / ign * 0.08)) startBurn(i);
+      } else if (t === MIASMA) {
+        if (h > 1.5) { setFlame(i, 5, 12); heat[i] += 22; }        // gas flashes; the burst sets off its neighbours
+      } else if (t === ICHOR) {
+        if (h > 12 && rnd() < 0.02) set(i, MIASMA);                 // boils off into miasma
+      } else if (t === HOLY) {
+        if (h > 22 && rnd() < 0.05) { set(i, STEAM); heat[i] -= 8; }
+      }
+    }
+  }
+
+  function updSpout(i, x, y) {
+    if (rnd() * 1000 > life[i]) return;
+    const m = aux[i];
+    const j = m === FIRE ? i - W : i + W;
+    if (j < 0 || j >= N) return;
+    const tt = type[j];
+    if (tt === EMPTY || KIND[tt] === K_GAS) {
+      if (m === FIRE) setFlame(j, 16, 30); else set(j, m);
+    }
+  }
+
+  function step() {
+    frame = frame >= 65535 ? 1 : frame + 1;
+    const ltr = frame & 1;
+    for (let y = H - 1; y >= 0; y--) {
+      const row = y * W;
+      for (let k = 0; k < W; k++) {
+        const x = ltr ? k : W - 1 - k, i = row + x, t = type[i];
+        if (t === EMPTY || stamp[i] === frame) continue;
+        if (burn[i] && updBurning(i, x, y, t)) continue;
+        if (RESP[t] && applyForce(i, x, y, t)) continue;
+        switch (KIND[t]) {
+          case K_POWDER: updPowder(i, x, y, t); break;
+          case K_LIQUID: updLiquid(i, x, y, t); break;
+          case K_GAS:    updGas(i, x, y, t); break;
+          case K_FIRE:   updFire(i, x, y); break;
+          case K_SPOUT:  updSpout(i, x, y); break;
+        }
+      }
+    }
+    stepParticles();
+    stepBodies();
+    if (frame % COLLAPSE.every === 0) processCollapse();
+    heatStep();
+    if (frame % 8 === 0) decayStains(8);
+    windX.fill(0); windY.fill(0);
+  }
+
+  // ---------- backdrop (crypt masonry behind empty cells) ----------
+  const BG = new Uint32Array(N);
+  const BGR = new Uint8Array(N * 3);
+  for (let y = 0; y < H; y++) {
+    const course = (y / 7) | 0, off = (course & 1) ? 7 : 0;
+    const depth = 0.55 + 0.45 * (y / H);
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const mortar = (y % 7 === 0) || ((x + off) % 14 === 0);
+      const n = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+      let v = mortar ? 9 : 17 + Math.abs(n) * 5 + ((course * 7 + ((x + off) / 14 | 0) * 3) % 4);
+      v *= depth;
+      const r = v + 2, g = v - 1, b = v + 4;
+      BGR[i*3] = r; BGR[i*3+1] = g; BGR[i*3+2] = b;
+      BG[i] = pack(r | 0, Math.max(0, g) | 0, b | 0);
+    }
+  }
+
+  // ---------- scene ----------
+  function clearAll() { mov.fill(0); bodyOf.fill(0); collapseSeeds.length = 0; bodies.length = 0; type.fill(0); aux.fill(0); life.fill(0); shade.fill(0); vy.fill(0); vx.fill(0); fvx.fill(0); fvy.fill(0); plg.fill(0); burn.fill(0); heat.fill(0); stT.fill(0); stL.fill(0); stI.fill(0); mxT.fill(0); mxA.fill(0); pc = 0; }
+  function put(x, y, t) { if (x >= 0 && x < W && y >= 0 && y < H) set(y * W + x, t); }
+  function rect(x0, y0, x1, y1, t, p) {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (p === undefined || rnd() < p) put(x, y, t);
+  }
+  function line(x0, y0, x1, y1, t, w) {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+    for (let s = 0; s <= n; s++) {
+      const x = Math.round(x0 + (x1 - x0) * s / n), y = Math.round(y0 + (y1 - y0) * s / n);
+      rect(x, y, x + (w || 1) - 1, y + (w || 1) - 1, t);
+    }
+  }
+  function spout(x, y, m, rate) { const i = y * W + x; set(i, SPOUT); aux[i] = m; life[i] = rate; }
+
+  // ---------- rendering ----------
+  const view = document.getElementById('view');
+  const vctx = view.getContext('2d');
+  const simC = document.createElement('canvas'); simC.width = W; simC.height = H;
+  const sctx = simC.getContext('2d');
+  const img = sctx.createImageData(W, H), px = new Uint32Array(img.data.buffer);
+  const glowC = document.createElement('canvas'); glowC.width = W; glowC.height = H;
+  const gctx = glowC.getContext('2d');
+  const gimg = gctx.createImageData(W, H), gpx = new Uint32Array(gimg.data.buffer);
+  const BW = W / 2, BH = H / 2;
+  const blurC = document.createElement('canvas'); blurC.width = BW; blurC.height = BH;
+  const bctx = blurC.getContext('2d');
+  const canBlur = typeof bctx.filter === 'string';
+
+  const G_ICHOR_DIM = pack(12, 30, 2);
+  const G_ICHOR = pack(34, 80, 6),G_HOLY = pack(6, 16, 28), G_MIASMA = pack(26, 34, 4);
+  const G_FIRE = [pack(255,190,90), pack(255,150,50), pack(230,100,30), pack(170,60,20), pack(90,25,10), pack(30,8,4)];
+
+  function mixColor(t, o, amt, sh) {
+    const a = amt / 255, ia = 1 - a, s = (sh >> 6) * 3, b0 = t * 12 + s, b1 = o * 12 + s;
+    return pack((PAL_RGB[b0] * ia + PAL_RGB[b1] * a) | 0, (PAL_RGB[b0 + 1] * ia + PAL_RGB[b1 + 1] * a) | 0, (PAL_RGB[b0 + 2] * ia + PAL_RGB[b1 + 2] * a) | 0);
+  }
+  function fireIdx(i) {
+    const l = life[i], h = heat[i];
+    let k = l > 22 ? 1 : l > 12 ? 2 : l > 6 ? 3 : l > 2 ? 4 : 5;
+    if (h > 40 && k > 0) k--;                 // big hot fires burn whiter
+    if (rnd() < 0.35) k = Math.min(5, k + 1);
+    return k;
+  }
+  const BURN_RGB = [[255, 150, 50], [230, 100, 30], [170, 60, 20]];
+
+  // Shading from neighbours (after sand-slide): ground gets a lit rim where it meets open air above, a shadow on
+  // undersides (tunnel ceilings, overhangs) and grows darker with depth; liquids get a bright surface line and
+  // darken toward the bottom of a pool. Worked out per column, top to bottom.
+  const SHADE = { rim: 1.24, rim2: 1.08, deep: 0.035, deepMax: 0.34, under: 0.74, side: 1.06, sheen: 1.28, liqDeep: 0.03, liqMax: 0.36 };
+  function tone(i, f) {
+    const c = px[i];
+    let r = (c & 255) * f, g = ((c >>> 8) & 255) * f, b = ((c >>> 16) & 255) * f;
+    px[i] = pack(r > 255 ? 255 : r | 0, g > 255 ? 255 : g | 0, b > 255 ? 255 : b | 0);
+  }
+  function shadeTerrain() {
+    for (let x = 0; x < W; x++) {
+      let sr = 0, lr = 0;
+      for (let y = 0; y < H; y++) {
+        const i = y * W + x, t = type[i], k = KIND[t];
+        if ((k === K_STATIC || k === K_POWDER) && !burn[i] && t !== EMBER) {
+          sr++; lr = 0;
+          let f = sr === 1 ? SHADE.rim : sr === 2 ? SHADE.rim2 : 1 - Math.min(SHADE.deepMax, (sr - 2) * SHADE.deep);
+          if (y < H - 1 && isOpen(i + W)) f *= SHADE.under;
+          else if (sr > 2 && ((x > 0 && isOpen(i - 1)) || (x < W - 1 && isOpen(i + 1)))) f *= SHADE.side;
+          if (f !== 1) tone(i, f);
+        } else if (k === K_LIQUID) {
+          lr++; sr = 0;
+          const f = lr === 1 && y > 0 && isOpen(i - W) ? SHADE.sheen : 1 - Math.min(SHADE.liqMax, (lr - 1) * SHADE.liqDeep);
+          if (f !== 1) tone(i, f);
+        } else { sr = 0; lr = 0; }
+      }
+    }
+  }
+  function render() {
+    gpx.fill(0);
+    for (let i = 0; i < N; i++) {
+      const t = type[i];
+      if (t === EMPTY) {
+        px[i] = BG[i];
+        const h = heat[i];
+        if (h > 4) gpx[i] = pack(Math.min(90, h * 1.6) | 0, Math.min(35, h * 0.5) | 0, 0);   // hot air glows faintly
+        continue;
+      }
+      const k = KIND[t];
+      if (k === K_GAS) {
+        const c = GAS_RGB[t], a = DEF[t].a * Math.min(1, life[i] / 40), ia = 1 - a;
+        px[i] = pack((BGR[i*3]*ia + c[0]*a) | 0, (BGR[i*3+1]*ia + c[1]*a) | 0, (BGR[i*3+2]*ia + c[2]*a) | 0);
+        if (t === MIASMA) gpx[i] = G_MIASMA;
+      } else if (k === K_FIRE) {
+        const f = fireIdx(i); px[i] = FIRE_PAL[f]; gpx[i] = G_FIRE[f];
+      } else if (burn[i] || t === EMBER) {
+        // burning: the material shows through a flickering glow; embers glow on their own
+        const b = t * 12 + (shade[i] >> 6) * 3, g = BURN_RGB[(rnd() * 3) | 0];
+        const a = t === EMBER ? 0.55 + rnd() * 0.35 : 0.35 + rnd() * 0.4, ia = 1 - a;
+        px[i] = pack((PAL_RGB[b] * ia + g[0] * a) | 0, (PAL_RGB[b + 1] * ia + g[1] * a) | 0, (PAL_RGB[b + 2] * ia + g[2] * a) | 0);
+        gpx[i] = G_FIRE[t === EMBER ? 2 : 3];
+      } else if (k === K_SPOUT) {
+        px[i] = PAL[aux[i] * 4 + 2]; gpx[i] = aux[i] === FIRE ? G_FIRE[1] : 0;
+      } else if (stL[i]) {
+        const st = stT[i];
+        const age = 63 - ((stL[i] * 63 / STAIN_TICKS[st]) | 0);
+        const o = (st * 64 + age) * 4, a = STAIN_LUT[o + 3] / 255 * (stI[i] / 255), ia = 1 - a;
+        const b = t * 12 + (shade[i] >> 6) * 3;
+        px[i] = pack((PAL_RGB[b] * ia + STAIN_LUT[o] * a) | 0, (PAL_RGB[b + 1] * ia + STAIN_LUT[o + 1] * a) | 0, (PAL_RGB[b + 2] * ia + STAIN_LUT[o + 2] * a) | 0);
+        if (STAIN_GLOW[st] && age < 24) gpx[i] = G_ICHOR_DIM;
+      } else if (mxA[i]) {
+        px[i] = mixColor(t, mxT[i], mxA[i], shade[i]);
+        if (t === ICHOR || mxT[i] === ICHOR) gpx[i] = G_ICHOR_DIM; else if (t === HOLY) gpx[i] = G_HOLY;
+      } else {
+        px[i] = PAL[t * 4 + (shade[i] >> 6)];
+        if (t === ICHOR) gpx[i] = G_ICHOR; else if (t === HOLY) gpx[i] = G_HOLY;
+      }
+    }
+    shadeTerrain();
+    for (let p = 0; p < pc; p++) {
+      const x = Px[p] | 0, y = Py[p] | 0;
+      if (x < 0 || x >= W || y < 0 || y >= H) continue;
+      const i = y * W + x, t = Pt[p];
+      px[i] = Pma[p] ? mixColor(t, Pmt[p], Pma[p], Ps[p]) : PAL[t * 4 + (Ps[p] >> 6)];
+      if (t === ICHOR) gpx[i] = G_ICHOR; else if (t === HOLY) gpx[i] = G_HOLY;
+    }
+    shadeWorldFx();                                       // dig wear, beam light
+    sctx.putImageData(img, 0, 0);
+    gctx.putImageData(gimg, 0, 0);
+    bctx.clearRect(0, 0, BW, BH);
+    if (canBlur) bctx.filter = 'blur(2px)';
+    bctx.drawImage(glowC, 0, 0, BW, BH);
+    if (canBlur) bctx.filter = 'none';
+
+    const dw = view.width, dh = view.height;
+    vctx.globalCompositeOperation = 'source-over';
+    vctx.imageSmoothingEnabled = false;
+    vctx.drawImage(simC, 0, 0, dw, dh);
+    vctx.imageSmoothingEnabled = true;
+    vctx.globalCompositeOperation = 'lighter';
+    vctx.globalAlpha = 0.9;
+    vctx.drawImage(blurC, 0, 0, dw, dh);
+    vctx.globalAlpha = 1;
+    vctx.globalCompositeOperation = 'source-over';
+
+    drawOverlay(dw, dh);
+  }
+
+  let dpr = 1;
+  function fit() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    const r = view.getBoundingClientRect();
+    view.width = Math.max(1, Math.round(r.width * dpr));
+    view.height = Math.max(1, Math.round(r.height * dpr));
+  }
+  new ResizeObserver(fit).observe(view);
+  fit();
+
+  // ---------- the range: world ----------
+  let surf = new Int16Array(W);
+  function blob(cx, cy, rx, ry, fn) {
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
+      for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+        if (x < 0 || x >= W || y < 0 || y >= H) continue;
+        const d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
+        if (d <= 1) fn(y * W + x, x, y, d);
+      }
+  }
+  function coffin(x0, y0, w, h) {
+    rect(x0, y0, x0 + w - 1, y0 + h - 1, EMPTY);
+    rect(x0, y0, x0 + w - 1, y0 + 1, WOOD); rect(x0, y0 + h - 2, x0 + w - 1, y0 + h - 1, WOOD);
+    rect(x0, y0, x0 + 1, y0 + h - 1, WOOD); rect(x0 + w - 2, y0, x0 + w - 1, y0 + h - 1, WOOD);
+    const my = y0 + (h >> 1);
+    line(x0 + 4, my, x0 + w - 7, my, BONE);
+    for (let x = x0 + 6; x < x0 + w - 8; x += 3) { put(x, my - 1, BONE); put(x, my + 1, BONE); }
+    rect(x0 + w - 6, my - 1, x0 + w - 4, my + 1, BONE);
+    rect(x0 + 2, y0 + 2, x0 + w - 3, y0 + h - 3, FLESH, 0.5);
+  }
+  function gravestone(x, base) {
+    rect(x, base - 6, x + 3, base - 1, STONE);
+    put(x, base - 6, EMPTY); put(x + 3, base - 6, EMPTY);
+    rect(x - 1, base - 1, x + 4, base, STONE);
+  }
+
+  function fillE(x0, y0, x1, y1, m) {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++)
+      if (x >= 0 && x < W && y >= 0 && y < H && type[y * W + x] === EMPTY) put(x, y, m);
+  }
+  // a body lying on its back, head to the right: a bone skeleton wrapped in flesh, bleeding out
+  function corpse(x) {
+    const g = surf[x + 3], y = g - 1;
+    for (let xx = x - 7; xx <= x + 13; xx++) for (let yy = g; yy < surf[xx]; yy++) put(xx, yy, DIRT);  // level the ground under it
+    line(x, y - 1, x + 9, y - 1, BONE);                                   // spine
+    for (let k = x + 3; k <= x + 7; k += 2) { put(k, y - 2, BONE); put(k, y, BONE); }   // ribs
+    line(x - 6, y, x - 1, y, BONE);                                       // legs
+    line(x + 2, y - 3, x + 6, y - 4, BONE);                               // an arm across the chest
+    rect(x + 10, y - 2, x + 11, y - 1, BONE);                             // skull
+    fillE(x - 7, y - 1, x - 1, y, FLESH);
+    fillE(x, y - 3, x + 9, y, FLESH);
+    fillE(x + 10, y - 3, x + 12, y, FLESH);
+    for (let k = 0; k < 10; k++) { const bx = x - 4 + ((rnd() * 18) | 0); fillE(bx, y - 4, bx, y - 4, BLOOD); }
+  }
+
+  function generate() {
+    clearAll();
+    const ph = rnd() * 10;
+    for (let x = 0; x < W; x++) {
+      let s = 64 + 4 * Math.sin(x * 0.03 + ph) + 2 * Math.sin(x * 0.11 + ph * 2) + 1.2 * Math.sin(x * 0.31);
+      if (x < 46) s = 64 + (s - 64) * Math.max(0, (x - 30) / 16);          // flat ground to stand on at the start
+      surf[x] = Math.round(s);
+    }
+    for (let x = 0; x < W; x++) {
+      const rock = 171 + Math.round(2 * Math.sin(x * 0.09) + Math.sin(x * 0.37));
+      const band = 106 + Math.round(6 * Math.sin(x * 0.045 + ph) + 2 * Math.sin(x * 0.2));
+      const gap = Math.sin(x * 0.13 + ph * 3) > 0.82;                      // breaks in the stone band
+      for (let y = surf[x]; y < H; y++) {
+        let m;
+        if (y >= rock) m = BEDROCK;
+        else if (y < surf[x] + 3) m = DIRT;                                 // loose topsoil
+        else if (!gap && y >= band && y < band + 7) m = STONE;               // crypt stone stratum
+        else m = EARTH;
+        put(x, y, m);
+      }
+    }
+    // bone strata deep down
+    for (let n = 0; n < 40; n++) {
+      const x = 4 + ((rnd() * (W - 12)) | 0), y = 122 + ((rnd() * 44) | 0), len = 3 + ((rnd() * 5) | 0);
+      if (type[y * W + x] !== EARTH) continue;
+      for (let k = 0; k < len; k++) if (type[y * W + x + k] === EARTH) put(x + k, y, BONE);
+    }
+    // pockets of loose grave dirt that cave in when undermined
+    blob(118, 86, 12, 6, i => { if (type[i] === EARTH) set(i, DIRT); });
+    blob(286, 130, 10, 7, i => { if (type[i] === EARTH) set(i, DIRT); });
+    // sealed pockets of liquid
+    const pocket = (cx, cy, rx, ry, m) => blob(cx, cy, rx, ry, i => { if (type[i] !== BEDROCK) set(i, m); });
+    pocket(88, 94, 11, 5, BLOOD);
+    pocket(205, 134, 13, 6, ICHOR);
+    pocket(262, 92, 9, 5, TALLOW);
+    pocket(150, 152, 14, 6, HOLY);
+    // buried coffins
+    coffin(56, 78, 20, 8);
+    coffin(168, 90, 22, 8);
+    coffin(232, 146, 20, 8);
+    // a sealed crypt chamber below the stone band
+    rect(110, 124, 146, 142, STONE);
+    rect(112, 126, 144, 140, EMPTY);
+    for (let x = 116; x < 140; x++) { const h = Math.max(0, 5 - Math.abs(x - 128) * 0.4) | 0; for (let y = 140 - h; y <= 140; y++) put(x, y, rnd() < 0.7 ? BONE : FLESH); }
+    // graveyard on the surface
+    for (const gx of [60, 82, 140, 196, 228]) gravestone(gx, surf[gx + 1]);
+    // a dead tree
+    const tx = 300, tb = surf[tx];
+    rect(tx, tb - 26, tx + 2, tb - 1, WOOD);
+    line(tx + 1, tb - 18, tx - 9, tb - 27, WOOD, 2);
+    line(tx + 2, tb - 22, tx + 10, tb - 31, WOOD, 2);
+    line(tx - 5, tb - 23, tx - 8, tb - 30, WOOD);
+    wounds.length = 0;
+    // fresh corpses from the last battle, lying in the open
+    for (const cx of [100, 170, 252]) corpse(cx);
+    foes.length = 0; rags.length = 0; chunks.length = 0;
+    // the necromancer
+    P.x = 24; P.y = surf[24]; P.vx = 0; P.vy = 0;
+    mana = MANA_MAX;
+    for (const fx2 of [128, 214, 284]) spawnFoe(fx2);
+  }
+
+  // ---------- the necromancer ----------
+  const P = { x: 24, y: 60, vx: 0, vy: 0, face: 1, ground: false, w: 5, h: 20, walkPhase: 0, armF: null, armB: null };
+  const keys = {};
+  const aim = { x: 60, y: 60 };
+  function solidForPlayer(t) { const k = KIND[t]; return k === K_STATIC || k === K_POWDER || k === K_SPOUT; }
+  function boxHits(x, y) { return boxHitsB(P, x, y); }
+  function boxHitsB(b, x, y) {
+    const x0 = Math.floor(x - b.w / 2 + 0.05), x1 = Math.floor(x + b.w / 2 - 0.05);
+    const y0 = Math.floor(y - b.h + 0.05), y1 = Math.floor(y - 0.05);
+    for (let cy = y0; cy <= y1; cy++) {
+      if (cy < 0) continue;
+      if (cy >= H) return true;
+      for (let cx = x0; cx <= x1; cx++) {
+        if (cx < 0 || cx >= W) return true;
+        if (solidForPlayer(type[cy * W + cx])) return true;
+      }
+    }
+    return false;
+  }
+  function wetness() {
+    let n = 0, w = 0;
+    const x0 = Math.floor(P.x - 2), y0 = Math.floor(P.y - P.h);
+    for (let cy = y0; cy < y0 + P.h; cy += 2) for (let cx = x0; cx < x0 + 5; cx += 2) {
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+      n++; if (KIND[type[cy * W + cx]] === K_LIQUID) w++;
+    }
+    return n ? w / n : 0;
+  }
+  function updatePlayer() {
+    const wet = wetness(), swim = wet > 0.4;
+    const move = ((keys.KeyA || keys.ArrowLeft) ? -1 : 0) + ((keys.KeyD || keys.ArrowRight) ? 1 : 0);
+    const down = keys.KeyS || keys.ArrowDown;
+    const speed = swim ? 0.28 : 0.55;
+    P.vx += (move * speed - P.vx) * 0.35;
+    P.vy = Math.min(P.vy + (swim ? 0.03 : 0.12), swim ? 0.6 : 3);
+    const jump = keys.KeyW || keys.Space || keys.ArrowUp;
+    if (jump) {
+      if (P.ground) { P.vy = -1.45; P.ground = false; }
+      else if (swim) P.vy = Math.max(P.vy - 0.12, -0.7);
+    }
+    if (down && !P.ground) P.vy = Math.min(P.vy + (swim ? 0.1 : 0.12), swim ? 0.9 : 3);   // dive, or drop faster
+    // horizontal, stepping up small ledges
+    const sx = Math.max(1, Math.ceil(Math.abs(P.vx) / 0.5));
+    for (let s = 0; s < sx; s++) {
+      const nx = P.x + P.vx / sx;
+      if (!boxHits(nx, P.y)) { P.x = nx; continue; }
+      let up = false;
+      for (let k = 1; k <= 4 && P.ground; k++) if (!boxHits(nx, P.y - k)) { P.x = nx; P.y -= k; up = true; break; }
+      if (!up) { P.vx = 0; break; }
+    }
+    // vertical
+    P.ground = false;
+    const sy = Math.max(1, Math.ceil(Math.abs(P.vy) / 0.5));
+    for (let s = 0; s < sy; s++) {
+      const ny = P.y + P.vy / sy;
+      if (!boxHits(P.x, ny)) { P.y = ny; continue; }
+      if (P.vy > 0) P.ground = true;
+      P.vy = 0; break;
+    }
+    if (!P.ground && P.vy >= 0 && boxHits(P.x, P.y + 0.35)) P.ground = true;
+    // buried by falling debris: shoulder up out of it
+    if (boxHits(P.x, P.y)) for (let k = 1; k <= 3; k++) if (!boxHits(P.x, P.y - k)) { P.y -= k; break; }
+    P.face = aim.x >= P.x ? 1 : -1;
+    P.walkPhase += Math.abs(P.vx) * 0.45;
+    P.armF = { x: P.face * 0.34, y: 0.94 };                  // the staff hand, held a little forward
+    if (spell === 'harvest' && casting && mana > 0) {         // the other arm reaches for what he's harvesting
+      const nk = pose(P).neck; let dx = aim.x - nk.x, dy = aim.y - nk.y; const L = Math.hypot(dx, dy) || 1;
+      P.armB = { x: dx / L, y: dy / L };
+    } else P.armB = null;
+  }
+  function staffTip() { const hd = pose(P).handF; return { x: hd.x, y: hd.y - 12 }; }
+
+  // ---------- the Dig spell ----------
+  // Hardness: how much of the beam a cell soaks up before it crumbles. Bedrock can't be dug.
+  const HARD = new Float32Array(T);
+  HARD[ASH] = 4; HARD[EMBER] = 4; HARD[DIRT] = 6; HARD[MUD] = 8; HARD[RUBBLE] = 10;
+  HARD[FLESH] = 14; HARD[EARTH] = 18; HARD[WOOD] = 40; HARD[BONE] = 60; HARD[STONE] = 150; HARD[BONEBIT] = 20;
+  const DIG = { power: 2.6, radius: 10, range: 36, cost: 9.8 };   // radius 10 carves tunnels the necromancer can walk through   // power per tick at the beam's heart; cost in mana per second
+  const MANA_MAX = 100, MANA_REGEN = 70, MANA_DELAY = 6;   // demo tuning: refills in about a second and a half
+  let mana = MANA_MAX, idle = 0, casting = false, beam = null, spell = 'dig';
+  const fx = [];   // dust and sparks, drawn over the world
+
+  function crumble(q, t, dx, dy) {
+    const qx = q % W, qy = (q / W) | 0, r = rnd();
+    const was = burn[q];
+    if (was && (t === WOOD || t === FLESH)) { set(q, EMBER); burn[q] = 120 + ((rnd() * 200) | 0); }
+    else if (t === EARTH) set(q, r < 0.08 ? DIRT : EMPTY);      // a little loose dirt; more would choke the tunnel
+    else if (t === STONE) set(q, r < 0.4 ? RUBBLE : EMPTY);
+    else if (t === BONE) set(q, r < 0.3 ? ASH : EMPTY);
+    else if (t === WOOD) set(q, r < 0.25 ? ASH : EMPTY);
+    else if (t === FLESH) {
+      // flesh doesn't crumble, it bursts
+      if (r < 0.45) { set(q, BLOOD); fvx[q] = -dx * 1.5 + (rnd() - 0.5); fvy[q] = -dy * 1.5; }
+      else if (r < 0.55) set(q, TALLOW);
+      else set(q, EMPTY);
+      for (let n = 0; n < 3; n++) {
+        const j = q + (((rnd() * 3) | 0) - 1) + (((rnd() * 3) | 0) - 1) * W;
+        if (j >= 0 && j < N && j !== q) splatter(j, BLOOD, -dx, -dy, 3);
+      }
+    } else set(q, EMPTY);
+    const n = t === FLESH ? 1 : 2;
+    for (let k = 0; k < n; k++) {
+      const b = t * 12 + ((rnd() * 4) | 0) * 3;
+      fx.push({ x: qx + 0.5, y: qy + 0.5, vx: -dx * (0.3 + rnd() * 0.5) + (rnd() - 0.5) * 0.7, vy: -dy * (0.3 + rnd() * 0.5) + (rnd() - 0.5) * 0.7 - 0.25,
+                life: 14 + ((rnd() * 18) | 0), max: 32, r: PAL_RGB[b], g: PAL_RGB[b + 1], bl: PAL_RGB[b + 2], glow: false });
+    }
+  }
+
+  function castDig() {
+    if (!casting || mana <= 0) { beam = null; return; }
+    mana = Math.max(0, mana - DIG.cost / 60);
+    idle = 0;
+    const tip = staffTip();
+    let dx = aim.x - tip.x, dy = aim.y - tip.y;
+    const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+    let ex = tip.x + dx * DIG.range, ey = tip.y + dy * DIG.range, hit = -1, wall = false;
+    let foeHit = null, ragHit = null;
+    for (let s = 0.5; s <= DIG.range; s += 0.5) {
+      const fx0 = tip.x + dx * s, fy0 = tip.y + dy * s, cx = Math.floor(fx0), cy = Math.floor(fy0);
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) { ex = fx0; ey = fy0; break; }
+      for (const e of foes) if (inFoe(e, fx0, fy0)) { foeHit = e; break; }
+      if (foeHit) { ex = fx0; ey = fy0; break; }
+      ragHit = ragAt(fx0, fy0);
+      if (ragHit) { ex = fx0; ey = fy0; break; }
+      const q = cy * W + cx, t = type[q];
+      if (t === BEDROCK) { wall = true; ex = fx0; ey = fy0; break; }
+      if (HARD[t] > 0) { hit = q; ex = fx0; ey = fy0; break; }
+    }
+    beam = { x0: tip.x, y0: tip.y, x1: ex, y1: ey, hit: hit >= 0 || !!foeHit || !!ragHit, wall, dx, dy };
+    if (foeHit) { hurt(foeHit, 0.75, ex, ey, dx, dy, 'dig'); return; }      // it grinds into them instead of the ground
+    if (ragHit) { dmgSeg(ragHit.rag, ragHit.sg, 1.3, ex, ey, dx, dy, 'dig'); return; }   // and shreds what's left of them
+    if (hit >= 0) {
+      const R = DIG.radius, RI = Math.ceil(R);
+      for (let oy = -RI; oy <= RI; oy++) for (let ox = -RI; ox <= RI; ox++) {
+        const d = Math.hypot(ox, oy); if (d > R) continue;
+        const cx = Math.floor(ex) + ox, cy = Math.floor(ey) + oy;
+        if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+        const q = cy * W + cx, t = type[q], h = HARD[t];
+        if (!h) continue;
+        dmg[q] += DIG.power * (1 - d / (R + 0.6));
+        if (dmg[q] >= h) crumble(q, t, dx, dy);
+      }
+    } else if (wall && rnd() < 0.6) {
+      fx.push({ x: ex, y: ey, vx: -dx * 0.6 + (rnd() - 0.5), vy: -dy * 0.6 + (rnd() - 0.5) - 0.3, life: 10 + ((rnd() * 10) | 0), max: 20, r: 200, g: 255, bl: 170, glow: true });
+    }
+  }
+
+  // ---------- the Harvest spell ----------
+  // How long each kind of body matter holds together against the pull (higher = slower to come apart).
+  const HSOFT = new Float32Array(T);
+  HSOFT[BLOOD] = 3; HSOFT[TALLOW] = 4; HSOFT[FLESH] = 10; HSOFT[BONEBIT] = 14; HSOFT[BONE] = 26;
+  // pull: strength of the gentle drag on everything within pullRadius of the contact point, toward the hand
+  // A cone in front of the necromancer: range in cells, cone = half-angle in radians, rays cast across it each tick.
+  // wind: strength of the swirl drawing everything in. power: how fast body matter is cut (per tick, near the hand).
+  const HARV = { cost: 6, range: 90, cone: 0.56, rays: 100, wind: 1.5, lift: 0.2, power: 0.75, collect: 4, rate: 0.6 };
+  // rate: one dial for how fast Harvest tears things apart (strain, cutting, shedding, damage); 1 = the earlier pace   // more rays so the wider far end stays covered
+  // collect: how many cells beyond the necromancer's body the pickup zone reaches. Body matter that the pull
+  // drags up to him (or that he walks into) while Harvest is active is taken straight into the hand.
+  function nearBody(fx, fy, pad) {
+    return fx >= P.x - P.w / 2 - pad && fx <= P.x + P.w / 2 + pad && fy >= P.y - P.h - pad && fy <= P.y + pad;
+  }
+  const RELIC = [[FLESH, 'Flesh'], [BONE, 'Bone'], [BLOOD, 'Blood'], [TALLOW, 'Fat']];
+  const inv = new Float32Array(T);
+  const hv = new Float32Array(N);       // how far each cell has been pulled apart
+  const gore = [];                       // bits on their way to the hand
+  let harvesting = false, harvestAt = null, harvestCone = null, handFlash = 0;
+  const coneMark = new Uint16Array(N); let coneTick = 1;
+  // is Harvest's pull acting on this spot right now? (anything it has hold of hovers one cell clear of the ground)
+  function inPull(x, y) {
+    if (!harvesting) return false;
+    const cx = Math.floor(x), cy = Math.floor(y);
+    return cx >= 0 && cx < W && cy >= 0 && cy < H && coneMark[cy * W + cx] === coneTick;
+  }
+  function inCone(x, y) {
+    if (!harvestCone) return 0;
+    const c = harvestCone, vx = x - c.x, vy = y - c.y, d = Math.hypot(vx, vy);
+    if (d > HARV.range || d < 0.5) return 0;
+    if ((vx * c.dx + vy * c.dy) / d < Math.cos(HARV.cone)) return 0;
+    return 1 - d / HARV.range;                                // 1 at the hand, 0 at the edge of reach
+  }
+  // the pull at a point: straight in toward the hand
+  function swirlAt(x, y, hx, hy) {
+    const rx = hx - x, ry = hy - y, rl = Math.hypot(rx, ry) || 1;
+    return { x: rx / rl, y: ry / rl, d: rl };
+  }
+  // ---- chunks: pieces of meat, bone and plate being hauled in, torn smaller the closer they get ----
+  // REND: how hard the pull strains a ragdoll's joints (limbs rip off first) and then its pieces (they break into chunks).
+  // Each body part has a weight (arms 1, head 2, legs 3, torso 6). Strain builds slower on heavy parts and their joints
+  // and pieces hold out longer, so a body is pulled apart in order: arms, then head, then legs, then the torso.
+  // joint/piece/torso are scaled by sqrt(weight); strain builds at strain / sqrt(weight), so the time taken grows with weight.
+  const WEIGHT = { armB: 1, armF: 1, head: 2, legB: 3, legF: 3, torso: 6 };
+  const REND = { strain: 1.6, joint: 115, piece: 54, torso: 77, max: 70, speed: 1.15, goreSpeed: 1.4 };   // goreSpeed: blood and scraps flying in, just faster than the chunks
+  const chunks = [];
+  // top speed for a chunk of n cells. Single cells whip in nearly as fast as the blood; anything bigger is far
+  // slower and the curve falls steeply with size: 2 cells 0.6, 4 cells 0.37, 9 cells 0.21, 21 cells 0.12
+  const CHUNK = { single: 1.33, two: 0.6, falloff: 0.7, shed: 0.012, holdTicks: 40 };   // holdTicks: a chunk hangs together this long before it can split
+  function chunkSpeed(n) { return n <= 1 ? CHUNK.single : CHUNK.two * Math.pow(2 / n, CHUNK.falloff); }
+  function pixelOf(t, shadeIdx) { const b = t * 12 + shadeIdx * 3; return [PAL_RGB[b], PAL_RGB[b + 1], PAL_RGB[b + 2]]; }
+  // pix: [{ox, oy, t, rgb, plate}] in world cells, around (x, y)
+  function makeChunk(x, y, pix, h, kick) {
+    if (!pix.length) return;
+    if (chunks.length >= REND.max) { for (const p of pix) if (!p.plate) goreBit(x + p.ox, y + p.oy, 0, -0.3, p.t, 1, 1); return; }
+    let dx = h.x - x, dy = h.y - y; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+    const k = kick || 0.6;
+    chunks.push({ x, y, vx: dx * k + (rnd() - 0.5) * 0.6, vy: dy * k - 0.4 - rnd() * 0.5, ang: 0, spin: (rnd() - 0.5) * 0.25, pix,
+                  splitAt: 8 + Math.sqrt(pix.length) * 4.5 * (0.7 + rnd() * 0.6), age: 0 });
+  }
+  // break a chunk in two across a random line; plate pieces fall away; it bleeds where it parts
+  function splitChunk(c, h) {
+    const a = rnd() * Math.PI, ux = Math.cos(a), uy = Math.sin(a);
+    const cs = Math.cos(c.ang), sn = Math.sin(c.ang);
+    const world = c.pix.map(p => ({ ...p, wx: c.x + p.ox * cs - p.oy * sn, wy: c.y + p.ox * sn + p.oy * cs }));
+    world.sort((p, q) => (p.wx * ux + p.wy * uy) - (q.wx * ux + q.wy * uy));
+    const cut = Math.max(1, Math.floor(world.length * (0.35 + rnd() * 0.3)));
+    for (const half of [world.slice(0, cut), world.slice(cut)]) {
+      const keep = [];
+      for (const p of half) { if (p.plate && rnd() < 0.7) placeCell(p.wx, p.wy, RUBBLE); else keep.push(p); }   // plate is shed
+      if (!keep.length) continue;
+      let mx = 0, my = 0; for (const p of keep) { mx += p.wx; my += p.wy; } mx /= keep.length; my /= keep.length;
+      const pix = keep.map(p => ({ ox: p.wx - mx, oy: p.wy - my, t: p.t, rgb: p.rgb, plate: p.plate }));
+      makeChunk(mx, my, pix, h, Math.hypot(c.vx, c.vy) * 0.8 + 0.3);
+      const nc = chunks[chunks.length - 1];
+      if (nc && nc.pix === pix) { nc.vx += (mx - c.x) * 0.25; nc.vy += (my - c.y) * 0.25; nc.splitAt = Math.min(nc.splitAt, c.splitAt * 0.7); }
+    }
+    for (let k = 0; k < 4 + ((rnd() * 4) | 0); k++) spawnDrop(c.x, c.y, (rnd() - 0.5) * 2.6, -0.8 - rnd() * 1.8, BLOOD);
+    if (rnd() < 0.6) puff(c.x, c.y, 'mist');
+  }
+  // the last scraps come apart into gore that flies into the palm
+  function shredChunk(c) {
+    const cs = Math.cos(c.ang), sn = Math.sin(c.ang);
+    for (const p of c.pix) {
+      const wx = c.x + p.ox * cs - p.oy * sn, wy = c.y + p.ox * sn + p.oy * cs;
+      if (p.plate) { placeCell(wx, wy, RUBBLE); continue; }
+      gore.push({ x: wx, y: wy, vx: c.vx + (rnd() - 0.5) * 0.8, vy: c.vy + (rnd() - 0.5) * 0.8, t: p.t, val: 1, age: 6,
+                  r: p.rgb[0], g: p.rgb[1], bl: p.rgb[2], px: wx, py: wy });
+    }
+    spawnDrop(c.x, c.y, (rnd() - 0.5) * 1.5, -0.6 - rnd(), BLOOD);
+  }
+  // let go of the pull and chunks drop; when they hit the ground they lie there as loose flesh and bone
+  function settleChunk(c) {
+    const cs = Math.cos(c.ang), sn = Math.sin(c.ang);
+    for (const p of c.pix) {
+      const wx = c.x + p.ox * cs - p.oy * sn, wy = c.y + p.ox * sn + p.oy * cs;
+      placeCell(wx, wy, p.plate ? RUBBLE : (p.t === BONEBIT ? BONEBIT : FLESH));
+    }
+  }
+  function stepChunks() {
+    const h = handPos();
+    for (let k = chunks.length - 1; k >= 0; k--) {
+      const c = chunks[k];
+      c.age++;
+      const dx = h.x - c.x, dy = h.y - c.y, d = Math.hypot(dx, dy) || 1;
+      const pulled = harvesting && d < HARV.range + 12;
+      // the smaller the chunk, the faster it flies: big slabs drift in, scraps race ahead to join the blood
+      const top = chunkSpeed(c.pix.length);
+      if (pulled) {
+        const acc = (0.0225 + 0.075 * Math.max(0, 1 - d / HARV.range)) * top / REND.speed;
+        c.vx += dx / d * acc; c.vy += dy / d * acc;
+        c.vx *= 0.94; c.vy *= 0.94;
+      } else { c.vy += 0.16; c.vx *= 0.98; }
+      const sp = Math.hypot(c.vx, c.vy); if (pulled && sp > top) { c.vx *= top / sp; c.vy *= top / sp; } else if (sp > 3) { c.vx *= 3 / sp; c.vy *= 3 / sp; }
+      c.x += c.vx; c.y += c.vy; c.ang += c.spin;
+      if (c.pix.length > 1 && rnd() < 0.02 * Math.sqrt(c.pix.length)) spawnDrop(c.x, c.y, c.vx * 0.2, 0.2, BLOOD);   // it drips
+      if (pulled && c.pix.length > 2 && rnd() < CHUNK.shed * HARV.rate * (0.4 + Math.max(0, 1 - d / HARV.range)) * Math.sqrt(c.pix.length)) {
+        // a single cell is torn off its edge and goes whipping in on its own
+        const cs = Math.cos(c.ang), sn = Math.sin(c.ang);
+        let bi = 0, bd = -1e9;
+        for (let m = 0; m < c.pix.length; m++) { const pp = c.pix[m], wx = pp.ox * cs - pp.oy * sn, wy = pp.ox * sn + pp.oy * cs, e2 = wx * dx / d + wy * dy / d + rnd(); if (e2 > bd) { bd = e2; bi = m; } }
+        const pp = c.pix.splice(bi, 1)[0], wx = c.x + pp.ox * cs - pp.oy * sn, wy = c.y + pp.ox * sn + pp.oy * cs;
+        if (pp.plate) placeCell(wx, wy, RUBBLE);
+        else makeChunk(wx, wy, [{ ox: 0, oy: 0, t: pp.t, rgb: pp.rgb, plate: false }], h, 0.9);
+        if (rnd() < 0.35) spawnDrop(wx, wy, dx / d * 0.8 + (rnd() - 0.5), -0.3 - rnd() * 0.6, BLOOD);
+      }
+      if (pulled) {
+        if (c.pix.length > 3 && d < c.splitAt && c.age > CHUNK.holdTicks) { splitChunk(c, h); chunks.splice(k, 1); continue; }
+        if (c.pix.length <= 3 && d < 9 || d < 2.5 || nearBody(c.x, c.y, 1)) { shredChunk(c); chunks.splice(k, 1); continue; }
+      } else if (solidAt(c.x, c.y + 1) || c.y > H) { settleChunk(c); chunks.splice(k, 1); continue; }
+    }
+  }
+  // the pull rips a clump of a corpse loose from the ground: the softened flesh and bone around a cell, together
+  function tearClump(q, h) {
+    const want = 4 + ((rnd() * 9) | 0), got = [q];
+    const seenC = new Set([q]);
+    for (let n = 0; n < got.length && got.length < want; n++) {
+      const g = got[n], gx = g % W;
+      for (const nb of [g - W, g + W, gx > 0 ? g - 1 : -1, gx < W - 1 ? g + 1 : -1]) {
+        if (nb < 0 || nb >= N || seenC.has(nb)) continue;
+        seenC.add(nb);
+        const tn = type[nb];
+        if ((tn === FLESH || tn === BONE || tn === BONEBIT) && hv[nb] >= HSOFT[tn] * 0.12 && got.length < want) got.push(nb);
+      }
+    }
+    let mx = 0, my = 0; for (const g of got) { mx += g % W + 0.5; my += ((g / W) | 0) + 0.5; } mx /= got.length; my /= got.length;
+    const pix = [];
+    for (const g of got) {
+      const t = type[g];
+      pix.push({ ox: g % W + 0.5 - mx, oy: ((g / W) | 0) + 0.5 - my, t: t === FLESH ? FLESH : BONEBIT, rgb: pixelOf(t, shade[g] >> 6), plate: false });
+      if (t === FLESH && rnd() < 0.15) set(g, BLOOD); else set(g, EMPTY);
+      hv[g] = 0;
+    }
+    makeChunk(mx, my, pix, h, 0.5);
+    const drops = 2 + ((rnd() * 4) | 0);                      // it comes away wet
+    for (let k = 0; k < drops; k++) spawnDrop(mx, my, (rnd() - 0.5) * 2, -0.8 - rnd() * 1.6, BLOOD);
+    if (rnd() < 0.4) puff(mx, my, 'mist');
+    openWound(mx, my, h.x, h.y);
+  }
+  // a ragdoll piece breaks into a few big chunks (head 1, limbs 2, torso 3), plate and all
+  function chunkify(rag, sg, h) {
+    if (sg.gone) return;
+    const Lk = LOOK[rag.look], spr = Lk[sprKey(sg.k)], rows = spr.length, w = spr[0].length;
+    const a = rag.pts[sg.a], b = rag.pts[sg.b];
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, px = -uy, py = ux, step = len / rows;
+    const parts = sg.k === 'torso' ? 3 : sg.k === 'head' ? 1 : 2;
+    const groups = Array.from({ length: parts }, () => []);
+    for (let u = 0; u < rows; u++) for (let v = 0; v < w; v++) {
+      const ch = spr[u][v]; if (ch === '.' || (sg.torn && sg.torn.has(u * w + v))) continue;
+      const vw = rag.face < 0 ? w - 1 - v : v;
+      const wx = a.x + ux * (u + 0.5) * step + px * (vw - w / 2 + 0.5), wy = a.y + uy * (u + 0.5) * step + py * (vw - w / 2 + 0.5);
+      const hex = Lk.pal[ch], rgb = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+      const plate = Lk.plate.includes(ch);
+      const gi = Math.min(parts - 1, Math.floor(u / rows * parts + (rnd() - 0.5) * 0.4));
+      groups[Math.max(0, gi)].push({ wx, wy, t: rnd() < 0.2 ? BONEBIT : FLESH, rgb, plate });
+    }
+    for (const gp of groups) {
+      if (!gp.length) continue;
+      let mx = 0, my = 0; for (const p of gp) { mx += p.wx; my += p.wy; } mx /= gp.length; my /= gp.length;
+      makeChunk(mx, my, gp.map(p => ({ ox: p.wx - mx, oy: p.wy - my, t: p.t, rgb: p.rgb, plate: p.plate })), h, 0.7);
+    }
+    sg.gone = true;
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    for (let k = 0; k < 10; k++) spawnDrop(cx, cy, (rnd() - 0.5) * 3, -0.8 - rnd() * 2.2, BLOOD);
+    for (let k = 0; k < 2; k++) puff(cx, cy, 'mist');
+    separateAll(rag);
+  }
+  function stillAttached(rag, sg) { return rag.segs.some(o => o !== sg && !o.gone && (o.a === sg.a || o.b === sg.a)); }
+  // the pull on one ragdoll piece: joints give first, then the piece itself comes apart into chunks
+  function strainPiece(rag, sg, near, h) {
+    const rw = Math.sqrt(WEIGHT[sg.k] || 1);
+    sg.strain = (sg.strain || 0) + REND.strain * HARV.rate * (0.4 + near) * (0.6 + rnd() * 0.8) / rw;
+    if (sg.k !== 'torso' && stillAttached(rag, sg)) {
+      if (sg.strain > REND.joint * rw) {
+        detach(rag, sg, 1.0); sg.strain = 0;
+        for (const pi of [sg.a, sg.b]) { const p = rag.pts[pi]; p.px -= h.dx * RAG.yank; p.py -= h.dy * RAG.yank + 0.1; }   // a tug toward you as it tears free
+      }
+      return;
+    }
+    if (sg.strain > (sg.k === 'torso' ? REND.torso : REND.piece) * rw) chunkify(rag, sg, h);
+  }
+  // tear a few pixels off a ragdoll piece, from the outside in; plate falls away, the rest goes to the hand
+  function tearBits(rag, sg, near, h) {
+    const Lk = LOOK[rag.look], spr = Lk[sprKey(sg.k)], rows = spr.length, w = spr[0].length;
+    if (!sg.torn) { sg.torn = new Set(); sg.total = 0; for (const r of spr) for (const ch of r) if (ch !== '.') sg.total++; }
+    const n = rnd() < 0.25 + 0.5 * near ? 1 + (rnd() < 0.25 + near * 0.6 ? 1 : 0) : 0;   // bits a second per piece
+    if (!n) return;
+    const a = rag.pts[sg.a], b = rag.pts[sg.b];
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, px = -uy, py = ux, step = len / rows;
+    const filled = (u, v) => u >= 0 && u < rows && v >= 0 && v < w && spr[u][v] !== '.' && !sg.torn.has(u * w + v);
+    const edge = [];
+    for (let u = 0; u < rows; u++) for (let v = 0; v < w; v++)
+      if (filled(u, v) && (!filled(u - 1, v) || !filled(u + 1, v) || !filled(u, v - 1) || !filled(u, v + 1))) edge.push(u * w + v);
+    for (let k = 0; k < n && edge.length; k++) {
+      const idx = edge.splice((rnd() * edge.length) | 0, 1)[0], u = (idx / w) | 0, v = idx % w, ch = spr[u][v];
+      sg.torn.add(idx);
+      const vw = rag.face < 0 ? w - 1 - v : v;                // where that pixel sits on screen
+      const wx = a.x + ux * (u + 0.5) * step + px * (vw - w / 2 + 0.5), wy = a.y + uy * (u + 0.5) * step + py * (vw - w / 2 + 0.5);
+      if (Lk.plate.includes(ch)) placeCell(wx, wy, RUBBLE);   // plate is torn off and falls
+      else {
+        goreBit(wx, wy, (rnd() - 0.5) * 0.8, -0.3 - rnd() * 0.5, rnd() < 0.2 ? BONEBIT : FLESH, 1, (rnd() * 4) | 0);
+        if (rnd() < 0.55) spawnDrop(wx, wy, (h.x - wx) * 0.04 + (rnd() - 0.5) * 1.4, -0.6 - rnd() * 1.2, BLOOD);
+        if (rnd() < 0.12) puff(wx, wy, 'mist');
+      }
+    }
+    if (sg.torn.size >= sg.total * 0.8) gib(rag, sg, 'harvest');   // little left: the rest comes apart and goes in
+  }
+
+  function handPos() {
+    const nk = pose(P).neck, sx0 = nk.x, sy0 = nk.y;
+    let dx = aim.x - sx0, dy = aim.y - sy0;
+    const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+    return { sx: sx0, sy: sy0, x: sx0 + dx * RIG.arm, y: sy0 + dy * RIG.arm, dx, dy };
+  }
+  // can the hand see this cell? earth, stone and wood in the way block the pull
+  function inReach(hx, hy, q) {
+    const tx = (q % W) + 0.5, ty = ((q / W) | 0) + 0.5;
+    const L = Math.hypot(tx - hx, ty - hy), n = Math.ceil(L / 0.6);
+    let lastQ = -1;
+    for (let k = 1; k < n; k++) {
+      const cx = Math.floor(hx + (tx - hx) * k / n), cy = Math.floor(hy + (ty - hy) * k / n);
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) return false;
+      const c = cy * W + cx;
+      if (c === q || c === lastQ) continue;
+      lastQ = c;
+      const t = type[c], kd = KIND[t];
+      if ((kd === K_STATIC || kd === K_POWDER) && !HSOFT[t]) return false;
+    }
+    return true;
+  }
+  // throw a real droplet of liquid into the world (it flies, splashes, stains, and can be pulled back in)
+  function spawnDrop(x, y, vxv, vyv, t) {
+    if (pc >= MAXP) return;
+    Px[pc] = x; Py[pc] = y; Pvx[pc] = vxv; Pvy[pc] = vyv; Pt[pc] = t; Ps[pc] = (rnd() * 256) | 0; Pmt[pc] = 0; Pma[pc] = 0; pc++;
+  }
+  function puff(x, y, kind) {
+    if (kind === 'mist') {                                   // a thin red haze where flesh tears
+      fx.push({ x, y, vx: (rnd() - 0.5) * 0.25, vy: -0.05 - rnd() * 0.1, life: 18 + ((rnd() * 14) | 0), max: 32,
+                r: 120 + ((rnd() * 40) | 0), g: 8, bl: 16, glow: false, mist: true, size: 1.2 + rnd() * 1.4 });
+    } else {                                                 // a pale splinter flicked off cracking bone
+      fx.push({ x, y, vx: (rnd() - 0.5) * 1.4, vy: -0.6 - rnd() * 0.9, life: 16 + ((rnd() * 16) | 0), max: 32,
+                r: 226, g: 216, bl: 188, glow: false });
+    }
+  }
+  function goreBit(x, y, vxv, vyv, t, val, shadeIdx) {
+    const b = t * 12 + shadeIdx * 3;
+    gore.push({ x, y, vx: vxv, vy: vyv, t, val, age: 0, r: PAL_RGB[b], g: PAL_RGB[b + 1], bl: PAL_RGB[b + 2], px: x, py: y });
+  }
+  // ---- arterial wounds: torn flesh sometimes leaves a wound that pumps blood out in a heartbeat rhythm ----
+  // beat: ticks between heartbeats; pulses: how many beats before it bleeds out; each beat is a strong
+  // spurt then a weaker one, and each is a little weaker than the last.
+  const WOUND = { chance: 0.4, max: 8, beat: 26, pulses: [5, 10], speed: [2.2, 3.8], perTick: 3, spread: 0.35 };
+  const wounds = [];
+  function fleshNear(x, y, r) {
+    let n = 0, sx = 0, sy = 0;
+    for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
+      const cx = Math.floor(x) + ox, cy = Math.floor(y) + oy;
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+      if (type[cy * W + cx] === FLESH) { n++; sx += cx + 0.5; sy += cy + 0.5; }
+    }
+    return n ? { n, x: sx / n, y: sy / n } : null;
+  }
+  function openWound(x, y, hx, hy) {
+    if (wounds.length >= WOUND.max || rnd() > WOUND.chance) return;
+    const body = fleshNear(x, y, 3);
+    if (!body || body.n < 4) return;
+    // spurt outward from the body, away from the hand, and upward
+    let dx = x - body.x + (x - hx) * 0.05, dy = y - body.y - 1.2;
+    const L = Math.hypot(dx, dy) || 1;
+    wounds.push({ x, y, dx: dx / L, dy: dy / L, t: (rnd() * 6) | 0, beats: 0, reach: 2,
+                  pulses: WOUND.pulses[0] + ((rnd() * (WOUND.pulses[1] - WOUND.pulses[0])) | 0), str: 1 });
+  }
+  function stepWounds() {
+    for (let k = wounds.length - 1; k >= 0; k--) {
+      const w = wounds[k];
+      if (!fleshNear(w.x, w.y, w.reach || 2)) { wounds[k] = wounds[wounds.length - 1]; wounds.pop(); continue; }   // nothing left to bleed
+      w.t++;
+      const ph = w.t % WOUND.beat;
+      const lub = ph < 5, dub = ph >= 9 && ph < 12;
+      if (lub || dub) {
+        const f = w.str * (lub ? 1 : 0.55);
+        for (let n = 0; n < WOUND.perTick; n++) {
+          const a = Math.atan2(w.dy, w.dx) + (rnd() - 0.5) * WOUND.spread * 2;
+          const sp = (WOUND.speed[0] + rnd() * (WOUND.speed[1] - WOUND.speed[0])) * f;
+          spawnDrop(w.x, w.y, Math.cos(a) * sp, Math.sin(a) * sp, BLOOD);
+        }
+        if (lub && ph === 0 && rnd() < 0.5) puff(w.x, w.y, 'mist');
+      }
+      if (ph === WOUND.beat - 1) {
+        w.beats++; w.str *= 0.86;
+        if (w.beats >= w.pulses) { wounds[k] = wounds[wounds.length - 1]; wounds.pop(); }
+      }
+    }
+  }
+
+  // quiet: matter swept up at the necromancer's feet just goes in, without fresh spray
+  function tearLoose(q, t, hx, hy, quiet) {
+    const qx = q % W, qy = (q / W) | 0, cx = qx + 0.5, cy = qy + 0.5;
+    // flesh comes apart wet: sometimes it leaves blood behind to be drawn in after it
+    if (t === FLESH && rnd() < 0.18) set(q, BLOOD); else set(q, EMPTY);
+    hv[q] = 0;
+    const ax = cx - hx, ay = cy - hy, aL = Math.hypot(ax, ay) || 1, ux = ax / aL, uy = ay / aL;
+    goreBit(cx, cy, ux * 0.3 + (rnd() - 0.5) * 0.6, -0.4 - rnd() * 0.5, t, 1, (rnd() * 4) | 0);
+    if (quiet) return;
+    if (t === FLESH) {
+      // gore: a few dark chunks and flecks of blood thrown off with it
+      const extra = 1 + ((rnd() * 2) | 0);
+      for (let k = 0; k < extra; k++) goreBit(cx, cy, (rnd() - 0.5) * 1.4, -0.5 - rnd() * 0.8, rnd() < 0.5 ? FLESH : BLOOD, 0, 3);
+      // spray: real blood flung out away from the hand, to splash, stain, drip, and be pulled back in
+      const drops = 3 + ((rnd() * 4) | 0);
+      for (let k = 0; k < drops; k++)
+        spawnDrop(cx, cy, ux * (0.8 + rnd() * 1.2) + (rnd() - 0.5) * 2.2, -1.2 - rnd() * 2.2, BLOOD);
+      if (rnd() < 0.55) puff(cx, cy, 'mist');
+      openWound(cx, cy, hx, hy);
+    } else if (t === BONE || t === BONEBIT) {
+      const n = 1 + ((rnd() * 3) | 0);
+      for (let k = 0; k < n; k++) puff(cx, cy, 'splinter');
+      if (rnd() < 0.3) spawnDrop(cx, cy, (rnd() - 0.5) * 1.2, -0.6 - rnd(), BLOOD);   // marrow
+    } else if (t === BLOOD && rnd() < 0.25) {
+      puff(cx, cy, 'mist');
+    }
+  }
+  function castHarvest() {
+    harvesting = casting && mana > 0;
+    if (!harvesting) { harvestCone = null; harvestAt = null; return; }
+    mana = Math.max(0, mana - HARV.cost / 60);
+    idle = 0;
+    const h = handPos(), spin = P.face;
+    harvestCone = { x: h.x, y: h.y, dx: h.dx, dy: h.dy };
+    coneTick = coneTick >= 65535 ? 1 : coneTick + 1;
+    const mark = coneTick, base = Math.atan2(h.dy, h.dx), half = HARV.cone, R = HARV.range;
+    // rays across the cone: the wind blows along them, and they cut whatever body matter they reach.
+    // Earth, stone and wood stop a ray; flesh in front shields what's behind it, so bodies are cut from the outside in.
+    for (let n = 0; n < HARV.rays; n++) {
+      const ang = base - half + 2 * half * (n + rnd()) / HARV.rays, ux = Math.cos(ang), uy = Math.sin(ang);
+      let power = 1, lift = 0;
+      for (let st = 1.5; st <= R; st += 0.7) {
+        const cx = Math.floor(h.x + ux * st);
+        let cy = Math.floor(h.y + uy * st) - lift;
+        if (cx < 0 || cx >= W || cy < 0 || cy >= H) break;
+        let q = cy * W + cx, t = type[q], kd = KIND[t];
+        if ((kd === K_STATIC || kd === K_POWDER) && !HSOFT[t]) {
+          // the pull skims the ground: a low step (up to 2 cells) with open air above it, it rides up and over
+          let hop = 0;
+          for (let k = 1; k <= 2 && cy - k >= 0; k++) { const tk = type[(cy - k) * W + cx], kk = KIND[tk]; if (!((kk === K_STATIC || kk === K_POWDER) && !HSOFT[tk])) { hop = k; break; } }
+          if (!hop || lift + hop > 6) break;
+          lift += hop; cy -= hop; q = cy * W + cx; t = type[q]; kd = KIND[t];
+        } else if (lift && st > 2) {
+          // and settles back down to just above the ground once it's past the step
+          const below = (cy + 1) * W + cx;
+          if (cy + 1 < H && isOpen(below)) lift = Math.max(0, lift - 1);
+        }
+        if (coneMark[q] === mark) continue;
+        coneMark[q] = mark;
+        const near = 1 - st / R;
+        const sw = swirlAt(cx + 0.5, cy + 0.5, h.x, h.y), f = HARV.wind * (0.35 + 0.65 * near);
+        windX[q] += sw.x * f;
+        windY[q] += sw.y * f - HARV.lift * f;
+        const soft = HSOFT[t];
+        if (!soft) continue;
+        if (t === BONE && rnd() < 0.03 * power) { const sh = shade[q]; set(q, BONEBIT); shade[q] = sh; continue; }   // bones work loose
+        hv[q] += HARV.power * HARV.rate * power * (0.4 + 0.6 * near) * (0.6 + rnd() * 0.8);
+        if (t === FLESH && hv[q] > soft * 0.25 && rnd() < 0.08) {
+          // it bleeds before it gives way: blood seeps into the nearest open cell below or beside it
+          for (const k of [q + W, q - 1, q + 1, q + W - 1, q + W + 1]) {
+            if (k >= 0 && k < N && Math.abs((k % W) - cx) <= 1 && type[k] === EMPTY) { set(k, BLOOD); fvy[k] = 0.5; break; }
+          }
+        }
+        if (hv[q] >= soft) { if (t === FLESH || t === BONE || t === BONEBIT) tearClump(q, h); else tearLoose(q, t, h.x, h.y); }
+        power *= 0.55;
+        if (power < 0.05) break;
+      }
+    }
+    const seen = (x, y) => { const cx = Math.floor(x), cy = Math.floor(y); return cx >= 0 && cx < W && cy >= 0 && cy < H && coneMark[cy * W + cx] === mark; };
+    // the living in the cone: wrenched toward you, cut, bleeding as they come
+    for (const e of foes) {
+      const c = chestOf(e);
+      if (nearBody(c.x, c.y, HARV.collect + 3)) {              // dragged right to you: torn apart at the hand
+        hurt(e, 1.4 * HARV.rate, c.x + (rnd() - 0.5) * 3, c.y + (rnd() - 0.5) * 8, -h.dx, -h.dy, 'harvest');
+        if (rnd() < 0.7) goreBit(c.x + (rnd() - 0.5) * 3, c.y + (rnd() - 0.5) * 8, (rnd() - 0.5), -0.5, rnd() < 0.6 ? FLESH : BLOOD, 0, 3);
+        continue;
+      }
+      const near = inCone(c.x, c.y);
+      if (!near || !(seen(c.x, c.y) || seen(c.x, c.y - 5) || seen(c.x, c.y + 5))) continue;
+      hurt(e, (0.3 + 0.5 * near) * HARV.rate, c.x + (rnd() - 0.5) * 3, c.y + (rnd() - 0.5) * 8, -h.dx, -h.dy, 'harvest');
+      const sw = swirlAt(c.x, c.y, h.x, h.y);
+      if (sw.d > 10) e.pullX += sw.x * FOE.pull * (0.4 + near);   // only very slightly dragged: they fight it
+      e.grabbed = 8;
+      if (rnd() < (0.05 + 0.12 * near) * HARV.rate) {          // chunks torn off them, and the blood with it
+        const bx = c.x + (rnd() - 0.5) * 4, by = c.y + (rnd() - 0.5) * 10, n = 2 + ((rnd() * 4) | 0), pal = LOOK.crusader.pal, pix = [];
+        for (let m = 0; m < n; m++) {
+          const ch = 'KWWSL'[(rnd() * 5) | 0], hex = pal[ch];
+          pix.push({ ox: (rnd() - 0.5) * 2, oy: (rnd() - 0.5) * 2, t: FLESH, rgb: [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)], plate: ch === 'S' });
+        }
+        makeChunk(bx, by, pix, h, 0.8);
+        for (let m = 0; m < 3; m++) spawnDrop(bx, by, sw.x * 1.4 + (rnd() - 0.5) * 1.5, sw.y * 1.4 - 0.6 - rnd(), BLOOD);
+      }
+    }
+    // the pieces of the dead: cut down bit by bit, or taken whole once the wind drags them to you
+    for (const rag of rags) for (const sg of rag.segs) {
+      if (sg.gone) continue;
+      const c = segCenter(rag, sg);
+      if (rag.age > 45 && (nearBody(c.x, c.y, HARV.collect + 6) || Math.hypot(c.x - h.x, c.y - h.y) < 16)) { chunkify(rag, sg, h); continue; }   // in your grasp: it comes apart
+      const near = inCone(c.x, c.y);
+      if (!near) continue;
+      const a = rag.pts[sg.a], b = rag.pts[sg.b];
+      if (!(seen(c.x, c.y) || seen(a.x, a.y) || seen(b.x, b.y))) continue;
+      strainPiece(rag, sg, near, h);
+    }
+    // droplets the wind has brought in are caught at the hand
+    for (let p = pc - 1; p >= 0; p--) {
+      const t = Pt[p];
+      if (!HSOFT[t]) continue;
+      if (Math.hypot(Px[p] - h.x, Py[p] - h.y) > 4 && !nearBody(Px[p], Py[p], HARV.collect)) continue;
+      const b = t * 12 + (Ps[p] >> 6) * 3;
+      gore.push({ x: Px[p], y: Py[p], vx: Pvx[p] * 0.5, vy: Pvy[p] * 0.5, t, val: 1, age: 10,
+                  r: PAL_RGB[b], g: PAL_RGB[b + 1], bl: PAL_RGB[b + 2], px: Px[p], py: Py[p] });
+      pc--;
+      Px[p] = Px[pc]; Py[p] = Py[pc]; Pvx[p] = Pvx[pc]; Pvy[p] = Pvy[pc]; Pt[p] = Pt[pc]; Ps[p] = Ps[pc]; Pmt[p] = Pmt[pc]; Pma[p] = Pma[pc];
+    }
+    // the pickup zone around the body: anything pulled (or walked) into it goes straight into the hand
+    {
+      const c = HARV.collect;
+      const x0 = Math.max(0, Math.floor(P.x - P.w / 2 - c)), x1 = Math.min(W - 1, Math.floor(P.x + P.w / 2 + c));
+      const y0 = Math.max(0, Math.floor(P.y - P.h - c)), y1 = Math.min(H - 1, Math.floor(P.y + c));
+      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+        const q = cy * W + cx, t = type[q];
+        if (HSOFT[t] && t !== BONE) tearLoose(q, t, h.x, h.y, true); // loose matter only; a skeleton still has to be pulled apart
+      }
+    }
+    // streaks of wind rushing in toward the hand
+    for (let k = 0; k < 7; k++) {
+      const ang = base + (rnd() * 2 - 1) * half, d = 6 + rnd() * (R - 6);
+      const x = h.x + Math.cos(ang) * d, y = h.y + Math.sin(ang) * d;
+      if (!seen(x, y)) continue;
+      fx.push({ x, y, px: x, py: y, vx: 0, vy: 0, life: 40, max: 40, wind: true, r: 130, g: 230, bl: 215, glow: false });
+    }
+  }
+  function stepGore() {
+    const h = handPos();
+    for (let k = gore.length - 1; k >= 0; k--) {
+      const g = gore[k];
+      if (g.t === FLESH && g.val && g.age > 3 && rnd() < 0.025 && !nearBody(g.x, g.y, HARV.collect + 2))
+        spawnDrop(g.x, g.y, g.vx * 0.2, Math.max(0, g.vy * 0.2), BLOOD);   // chunks drip on their way in
+      g.px = g.x; g.py = g.y;
+      const dx = h.x - g.x, dy = h.y - g.y, d = Math.hypot(dx, dy) || 1;
+      const pull = 0.035 + Math.min(0.18, g.age * 0.0065);
+      g.vx += dx / d * pull;                           // drawn straight in, a touch quicker than the chunks
+      g.vy += dy / d * pull;
+      g.vx *= 0.93; g.vy *= 0.93;
+      const sp = Math.hypot(g.vx, g.vy); if (sp > REND.goreSpeed) { g.vx *= REND.goreSpeed / sp; g.vy *= REND.goreSpeed / sp; }
+      g.x += g.vx; g.y += g.vy; g.age++;
+      if (d < 1.6 || (g.age > 4 && nearBody(g.x, g.y, 1)) || g.age > 400) {
+        if (g.val) { const rt = g.t === BONEBIT ? BONE : g.t; inv[rt] += g.val; bump(rt); }
+        handFlash = 6;
+        gore[k] = gore[gore.length - 1]; gore.pop();
+      }
+    }
+    if (handFlash) handFlash--;
+  }
+
+  function stepFx() {
+    for (let k = fx.length - 1; k >= 0; k--) {
+      const f = fx[k];
+      if (f.wind) {
+        const h = handPos(), sw = swirlAt(f.x, f.y, h.x, h.y), sp = 0.6 + Math.min(2.6, 40 / (sw.d + 4));
+        f.px = f.x; f.py = f.y; f.x += sw.x * sp; f.y += sw.y * sp;
+        if (sw.d < 2.5 || !harvesting) f.life = Math.min(f.life, 6);
+      } else if (f.mist) { f.x += f.vx; f.y += f.vy; f.size += 0.08; }
+      else { f.x += f.vx; f.y += f.vy; f.vy += 0.06; f.vx *= 0.96; }
+      if (--f.life <= 0) { fx[k] = fx[fx.length - 1]; fx.pop(); }
+    }
+    if (fx.length > 600) fx.length = 600;
+  }
+
+  // ---------- rigs: bodies built from segments ----------
+  // Every body is six segments on a skeleton: a torso from hip to neck, a head on the neck, two arms from the
+  // shoulders and two legs from the hip. Alive, the skeleton is posed by animation; dead, it becomes a ragdoll
+  // whose joints can tear loose, and each piece can be gibbed on its own.
+  const RIG = { leg: 8, torso: 7, head: 5, arm: 7 };
+  const BODY_H = RIG.leg + RIG.torso + RIG.head;           // 20 cells
+  // Sprites run along each segment from its root joint outward: one string per cell of length, read across.
+  // gib: which pixels are meat and which are plate when a piece is torn apart.
+  const LOOK = {
+    crusader: {
+      pal: { S: '#9a9ba4', s: '#6e6f78', V: '#141318', K: '#c99e83', W: '#dcd6c6', w: '#b9b2a2', G: '#c9a23a', b: '#5a4030', L: '#4a3a2c', B: '#2a221c', R: '#9a2222', X: '#b8bac4' },
+      torso: ['wWWWw', 'WWWWW', 'bbGbb', 'WWWWW', 'WGGGW', 'WWGWW', 'SWWWS'],
+      head:  ['.KKK.', 'sSSSs', 'SVVVS', 'SSSSS', '.SRS.'],
+      arm:   ['SS', 'Ss', 'WW', 'WW', 'Ww', 'ss', 'KK'],
+      leg:   ['LL', 'LL', 'LL', 'SS', 'LL', 'BB', 'BB', 'BB'],
+      plate: 'SsVX',
+    },
+    necro: {
+      pal: { H: '#2b2030', D: '#1c151f', F: '#d8ccaa', E: '#c9ff8a', B: '#9a8a64', X: '#3a2c40' },
+      torso: ['DHHHD', 'HHHHH', 'HHBHH', 'HHHHH', 'HHHHH', 'XHHHX', 'XHHHX'],
+      head:  ['.FFF.', 'HFFFH', 'HEFEH', 'HHHHH', '.HHH.'],
+      arm:   ['XX', 'HH', 'HH', 'HH', 'HD', 'DD', 'FF'],
+      leg:   ['HH', 'HH', 'HH', 'HD', 'DD', 'DD', 'DD', 'DF'],
+      plate: '',
+    },
+  };
+  const SEGS = [['torso', 'hip', 'neck'], ['head', 'neck', 'top'], ['armB', 'neck', 'handB'], ['armF', 'neck', 'handF'], ['legB', 'hip', 'footB'], ['legF', 'hip', 'footF']];
+  const PT_NAMES = ['hip', 'neck', 'top', 'handB', 'handF', 'footB', 'footF'];
+  const SEG_LEN = { torso: RIG.torso, head: RIG.head, armB: RIG.arm, armF: RIG.arm, legB: RIG.leg, legF: RIG.leg };
+  const sprKey = k => k[0] === 'a' ? 'arm' : k[0] === 'l' ? 'leg' : k;
+  const SEG_NAME = { torso: 'torso', head: 'head', armB: 'arm', armF: 'arm', legB: 'leg', legF: 'leg' };
+
+  // the skeleton's joints for a living body this frame
+  function pose(b) {
+    const moving = Math.abs(b.vx) > 0.06 && b.ground;
+    const ph = b.walkPhase || 0, sw = moving ? Math.sin(ph) * 0.55 : 0;
+    const bob = moving ? Math.abs(Math.cos(ph)) * 0.6 : 0;
+    const lean = (b.lean || 0) * b.face;
+    const hip = { x: b.x, y: b.y - RIG.leg + bob };
+    const neck = { x: hip.x + Math.sin(lean) * RIG.torso, y: hip.y - Math.cos(lean) * RIG.torso };
+    const top = { x: neck.x + Math.sin(lean) * RIG.head, y: neck.y - Math.cos(lean) * RIG.head };
+    const limb = (o, ang, L) => ({ x: o.x + Math.sin(ang) * L, y: o.y + Math.cos(ang) * L });   // ang 0 = straight down
+    const footF = limb(hip, sw, RIG.leg), footB = limb(hip, -sw, RIG.leg);
+    const aimArm = v => ({ x: neck.x + v.x * RIG.arm, y: neck.y + v.y * RIG.arm });
+    const handF = b.armF ? aimArm(b.armF) : limb(neck, -sw * 0.8 + b.face * 0.12, RIG.arm);
+    const handB = b.armB ? aimArm(b.armB) : limb(neck, sw * 0.8 + b.face * 0.05, RIG.arm);
+    return { hip, neck, top, handF, handB, footF, footB };
+  }
+
+  // draw one segment's pixel art laid along the bone from a to b
+  function drawSeg(a, b, spr, pal, flip, tint, marks, sx, sy, torn) {
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L, px = -uy, py = ux, rows = spr.length, w = spr[0].length;
+    const step = L / rows;
+    for (let u = 0; u < rows; u++) {
+      const row = spr[u];
+      for (let v = 0; v < w; v++) {
+        const sv = flip ? w - 1 - v : v, ch = row[sv];
+        if (ch === '.' || (torn && torn.has(u * w + sv))) continue;
+        const cx = a.x + ux * (u + 0.5) * step + px * (v - w / 2 + 0.5);
+        const cy = a.y + uy * (u + 0.5) * step + py * (v - w / 2 + 0.5);
+        vctx.fillStyle = tint && rnd() < 0.7 ? tint : pal[ch];
+        vctx.fillRect((cx - 0.6) * sx, (cy - 0.6) * sy, sx * 1.2, sy * 1.2);
+      }
+    }
+    if (marks) {
+      vctx.fillStyle = '#7d0f14';
+      for (const m of marks) {
+        const cx = a.x + ux * m.u + px * m.v, cy = a.y + uy * m.u + py * m.v;
+        vctx.fillRect((cx - 0.5) * sx, (cy - 0.5) * sy, sx, sy);
+      }
+    }
+  }
+  const DRAW_ORDER = ['armB', 'legB', 'torso', 'legF', 'head', 'armF'];
+  function drawRig(pz, look, face, tint, marks, sx, sy) {
+    const L = LOOK[look];
+    for (const k of DRAW_ORDER) {
+      const [, an, bn] = SEGS.find(s => s[0] === k);
+      drawSeg(pz[an], pz[bn], L[sprKey(k)], L.pal, face < 0, tint, marks && marks.filter(m => m.k === k), sx, sy);
+    }
+  }
+  function distToSeg(x, y, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / L2));
+    return Math.hypot(x - (a.x + dx * t), y - (a.y + dy * t));
+  }
+  // which segment of a posed body is nearest a point
+  function nearestSeg(pz, x, y) {
+    let best = null, bd = 1e9;
+    for (const [k, an, bn] of SEGS) { const d = distToSeg(x, y, pz[an], pz[bn]); if (d < bd) { bd = d; best = k; } }
+    return best;
+  }
+
+  // ---------- the living: crusaders of the Dawn Vigil ----------
+  // hp: how much they can take. sight: how far off they notice you. keep: how close they come.
+  // pull: how hard Harvest drags them (very slightly). brace: how hard a caught crusader digs in against it.
+  // fear (per crusader, 0..1, 0 for now): above panic, a caught crusader stops bracing and runs, and can break free.
+  const FOE = { hp: 100, walk: 0.3, chase: 0.42, sight: 55, keep: 11, pull: 0.02, brace: 0.05, panic: 0.5 };
+  const foes = [];
+  function placeOnGround(b, x) {
+    for (let y = b.h; y < H; y++) if (!boxHitsB(b, x, y) && boxHitsB(b, x, y + 1)) return y;
+    return -1;
+  }
+  function spawnFoe(x) {
+    x = Math.max(4, Math.min(W - 5, x));
+    const e = { x, y: 0, vx: 0, vy: 0, face: rnd() < 0.5 ? -1 : 1, ground: false, w: 5, h: BODY_H,
+                hp: FOE.hp, state: 'patrol', timer: 30 + rnd() * 90, walking: true, flash: 0,
+                pullX: 0, marks: [], walkPhase: rnd() * 6, cause: 'dig', fear: 0, grabbed: 0 };
+    const y = placeOnGround(e, x);
+    if (y < 0) return;
+    e.y = y;
+    foes.push(e);
+  }
+  function chestOf(e) { return { x: e.x, y: e.y - RIG.leg - RIG.torso * 0.6 }; }
+  function inFoe(e, fx, fy) { return fx >= e.x - e.w / 2 && fx <= e.x + e.w / 2 && fy >= e.y - e.h && fy <= e.y; }
+
+  // something hurt e by `amt` at (hx, hy), travelling along (dx, dy)
+  function hurt(e, amt, hx, hy, dx, dy, cause) {
+    e.hp -= amt; e.flash = 5; e.state = 'chase'; e.cause = cause || e.cause;
+    if (P.x !== e.x) e.face = P.x > e.x ? 1 : -1;
+    const n = amt >= 2 ? 5 : (rnd() < amt * 0.9 ? 1 : 0);        // they bleed from where they were struck
+    for (let k = 0; k < n; k++) spawnDrop(hx, hy, dx * 1.3 + (rnd() - 0.5) * 1.6, dy * 1.3 - 0.4 - rnd() * 1.4, BLOOD);
+    if (rnd() < 0.05 && e.marks.length < 16) {                    // and it shows where they were hit
+      const pz = pose(e), k = nearestSeg(pz, hx, hy), [, an, bn] = SEGS.find(s => s[0] === k);
+      const a = pz[an], b = pz[bn], L = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / L, uy = (b.y - a.y) / L;
+      e.marks.push({ k, u: Math.max(0.5, Math.min(L - 0.5, (hx - a.x) * ux + (hy - a.y) * uy)), v: Math.round(((hx - a.x) * -uy + (hy - a.y) * ux) * 0.6) });
+    }
+    if (cause !== 'harvest') e.vx += dx * 0.04;              // knocked back by a blow (Harvest's own pull is separate)
+    if (e.hp <= 0) kill(e, hx, hy, dx, dy);
+  }
+
+  function stepBody(e, move, speed) {
+    const wasVy = e.vy;
+    if (e.ground) e.fallFrom = e.y; else if (e.fallFrom === undefined || e.y < e.fallFrom) e.fallFrom = Math.min(e.fallFrom ?? e.y, e.y);
+    e.vx += (move * speed - e.vx) * 0.25 + e.pullX; e.pullX = 0;
+    e.vy = Math.min(e.vy + 0.12, 3);
+    const hov = e.hover > 0;
+    if (hov) {
+      e.hover--;
+      if (boxHitsB(e, e.x, e.y + 1) && !boxHitsB(e, e.x, e.y - 1)) e.y -= 1;   // lifted a single cell clear
+      if (e.vy > 0) e.vy = 0;
+      e.fallFrom = e.y;                                        // being carried isn't falling
+    }
+    const sx = Math.max(1, Math.ceil(Math.abs(e.vx) / 0.5));
+    let blocked = false;
+    for (let s = 0; s < sx; s++) {
+      const nx = e.x + e.vx / sx;
+      if (!boxHitsB(e, nx, e.y)) { e.x = nx; continue; }
+      let up = false;
+      for (let k = 1; k <= (hov ? 5 : 3) && (e.ground || hov); k++) if (!boxHitsB(e, nx, e.y - k)) { e.x = nx; e.y -= k; up = true; break; }
+      if (!up) { e.vx = 0; blocked = true; break; }
+    }
+    e.ground = false;
+    const sy = Math.max(1, Math.ceil(Math.abs(e.vy) / 0.5));
+    for (let s = 0; s < sy; s++) {
+      const ny = e.y + e.vy / sy;
+      if (!boxHitsB(e, e.x, ny)) { e.y = ny; continue; }
+      if (e.vy > 0) e.ground = true;
+      e.vy = 0; break;
+    }
+    if (!e.ground && e.vy >= 0 && boxHitsB(e, e.x, e.y + 0.35)) e.ground = true;
+    if (boxHitsB(e, e.x, e.y)) for (let k = 1; k <= 3; k++) if (!boxHitsB(e, e.x, e.y - k)) { e.y -= k; break; }
+    if (e.y > H + 20) e.y = H + 20;
+    e.walkPhase = (e.walkPhase || 0) + Math.abs(e.vx) * 0.45;
+    const fell = e.ground && wasVy > 0 ? e.y - (e.fallFrom ?? e.y) : 0;
+    return { blocked, fell };
+  }
+  // a falling chunk of ground reaching cell (x, y): is someone standing there? Crusaders under it are crushed
+  // (it carries on through their remains); the necromancer holds it up until he steps out from under it.
+  function crushAt(x, y, v) {
+    const fx0 = x + 0.5, fy0 = y + 0.5;
+    for (const e of foes) {
+      if (!inFoe(e, fx0, fy0)) continue;
+      if (v > 1.2) {
+        hurt(e, 30 * v, fx0, fy0, 0, 1, 'fall');
+        if (e.hp <= 0) return false;
+        return true;
+      }
+      return true;
+    }
+    return fx0 >= P.x - P.w / 2 && fx0 <= P.x + P.w / 2 && fy0 >= P.y - P.h && fy0 <= P.y;
+  }
+  function stepFoes() {
+    for (let k = foes.length - 1; k >= 0; k--) {
+      const e = foes[k];
+      if (e.flash) e.flash--;
+      const dxp = P.x - e.x, dist = Math.abs(dxp);
+      if (dist < FOE.sight && Math.abs(P.y - e.y) < 30) e.state = 'chase';
+      else if (e.state === 'chase' && dist > FOE.sight * 1.3) e.state = 'patrol';
+      let move = 0, speed = e.state === 'chase' ? FOE.chase : FOE.walk;
+      if (e.grabbed > 0) {
+        // caught in the pull: brace against it, or if afraid enough, turn and run for it
+        e.grabbed--;
+        const away = dxp > 0 ? -1 : 1;
+        if (e.fear > FOE.panic) {
+          e.face = away; move = away; speed = FOE.chase * (0.8 + e.fear);
+          e.armF = null; e.lean = 0.2;
+        } else {
+          if (dxp) e.face = dxp > 0 ? 1 : -1;
+          move = away; speed = FOE.brace;
+          e.armF = { x: e.face * 0.6, y: -0.8 };                   // arm up against the wind
+          e.lean = -0.18;                                          // leaning back, heels dug in
+        }
+      } else if (e.state === 'patrol') {
+        if (--e.timer <= 0) { e.timer = 80 + rnd() * 160; e.walking = rnd() < 0.7; if (rnd() < 0.5) e.face = -e.face; }
+        move = e.walking ? e.face : 0;
+        e.armF = null; e.lean = 0;
+      } else {
+        if (dxp) e.face = dxp > 0 ? 1 : -1;
+        move = dist > FOE.keep ? e.face : 0;
+        e.armF = { x: e.face * 0.93, y: -0.36 };                 // sword arm raised toward you
+        e.lean = 0.08;
+      }
+      const r = stepBody(e, move, speed);
+      if (r.blocked && e.state === 'patrol') e.face = -e.face;
+      if (r.fell > 12) { const c = chestOf(e); hurt(e, (r.fell - 12) * 2.2, c.x, e.y - 1, 0, -1, 'fall'); if (e.hp <= 0) continue; }
+      // fire and heat
+      const c = chestOf(e), ci = Math.floor(c.y) * W + Math.floor(c.x);
+      if (ci >= 0 && ci < N) {
+        const ht = Math.max(heat[ci], heat[Math.max(0, ci - 6 * W)], heat[Math.min(N - 1, ci + 6 * W)]);
+        if (ht > 6) { hurt(e, (ht - 6) * 0.025, c.x + (rnd() - 0.5) * 4, c.y + (rnd() - 0.5) * 8, 0, -1, 'fire'); if (e.hp <= 0) continue; }
+      }
+      // badly hurt: they leave a trail
+      if (e.hp < 70 && rnd() < (70 - e.hp) / 500)
+        spawnDrop(e.x + (rnd() - 0.5) * 3, e.y - 6 - rnd() * 8, (rnd() - 0.5) * 0.4, 0.2, BLOOD);
+    }
+  }
+
+  // ---------- the dead: ragdolls ----------
+  const rags = [];
+  // pull/drag: how Harvest moves a dead body (top speed is about pull x wind / (1 - drag)). yank: the tug when a limb tears free.
+  const RAG = { gravity: 0.16, max: 14, pull: 0.012, drag: 0.82, yank: 0.12 };
+  // how likely each joint is to tear loose at death, by what killed them (the part that was hit almost always goes)
+  const SEVER = { dig: 0.45, harvest: 0.03, fall: 0.35, fire: 0.1 };
+  function solidAt(x, y) {
+    const cx = Math.floor(x), cy = Math.floor(y);
+    if (cx < 0 || cx >= W || cy >= H) return true;
+    if (cy < 0) return false;
+    const k = KIND[type[cy * W + cx]];
+    return k === K_STATIC || k === K_POWDER || k === K_SPOUT;
+  }
+  function makeRag(pz, vx, vy, look, face, marks) {
+    const pts = PT_NAMES.map(n => {
+      const jx = (rnd() - 0.5) * 0.3, jy = (rnd() - 0.5) * 0.3;
+      return { x: pz[n].x, y: pz[n].y, px: pz[n].x - vx - jx, py: pz[n].y - vy - jy };
+    });
+    const segs = SEGS.map(([k, a, b]) => ({ k, a: PT_NAMES.indexOf(a), b: PT_NAMES.indexOf(b), len: SEG_LEN[k],
+      hp: k === 'torso' ? 70 : k === 'head' ? 40 : 30, gone: false, marks: (marks || []).filter(m => m.k === k) }));
+    const rag = { pts, segs, look, face, age: 0, spurts: [] };
+    rags.push(rag);
+    if (rags.length > RAG.max) { const old = rags.shift(); for (const sg of old.segs) if (!sg.gone) gib(old, sg, 'settle'); }
+    return rag;
+  }
+  function spurtAt(rag, pi, fromPi, sg, str, pulses) {
+    rag.spurts.push({ pi, from: fromPi, sg, t: (rnd() * 8) | 0, beats: 0, pulses, str });
+  }
+  // the joint at this segment's root gives way: the piece gets its own copy of the joint and goes its own way,
+  // and both the severed end and the stump it came off pump blood
+  function detach(rag, sg, str) {
+    const oi = sg.a;
+    const others = rag.segs.filter(o => o !== sg && !o.gone && (o.a === oi || o.b === oi));
+    if (!others.length) return;
+    const p = rag.pts[oi];
+    const ni = rag.pts.push({ x: p.x, y: p.y, px: p.px, py: p.py }) - 1;
+    sg.a = ni;
+    spurtAt(rag, ni, sg.b, sg, str * 0.8, 5 + ((rnd() * 5) | 0));
+    const stump = others.find(o => o.k === 'torso') || others[0];
+    spurtAt(rag, oi, stump.a === oi ? stump.b : stump.a, stump, str, 7 + ((rnd() * 5) | 0));
+  }
+  // any joint still shared by more than one piece comes apart (used when the piece holding them together is destroyed)
+  function separateAll(rag) {
+    for (let pi = 0; pi < rag.pts.length; pi++) {
+      const users = rag.segs.filter(o => !o.gone && (o.a === pi || o.b === pi));
+      for (let n = 1; n < users.length; n++) {
+        const o = users[n], p = rag.pts[pi];
+        const ni = rag.pts.push({ x: p.x, y: p.y, px: p.px, py: p.py }) - 1;
+        if (o.a === pi) o.a = ni; else o.b = ni;
+        spurtAt(rag, ni, o.a === ni ? o.b : o.a, o, 0.8, 4 + ((rnd() * 4) | 0));
+      }
+    }
+  }
+  function placeCell(wx, wy, m) {
+    let cx = Math.floor(wx), cy = Math.floor(wy);
+    if (cx < 0 || cx >= W) return;
+    for (let k = 0; k < 4 && cy >= 0; k++, cy--) {
+      if (cy < H && isOpen(cy * W + cx)) { set(cy * W + cx, m); return; }
+    }
+  }
+  // tear one piece apart: into the world as meat, bone and plate, into gore for the hand, or into ash
+  function gib(rag, sg, cause) {
+    if (sg.gone) return;
+    sg.gone = true;
+    const L = LOOK[rag.look], spr = L[sprKey(sg.k)], plate = L.plate;
+    const a = rag.pts[sg.a], b = rag.pts[sg.b];
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const rows = spr.length, w = spr[0].length, step = len / rows;
+    const toHand = cause === 'harvest';
+    for (let u = 0; u < rows; u++) for (let v = 0; v < w; v++) {
+      const ch = spr[u][v]; if (ch === '.' || (sg.torn && sg.torn.has(u * w + v))) continue;
+      const wx = a.x + ux * (u + 0.5) * step + px * (v - w / 2 + 0.5), wy = a.y + uy * (u + 0.5) * step + py * (v - w / 2 + 0.5);
+      const isPlate = plate.includes(ch);
+      if (cause === 'fire') { if (rnd() < 0.6) placeCell(wx, wy, rnd() < 0.15 ? EMBER : ASH); continue; }
+      if (isPlate) { if (rnd() < 0.6) placeCell(wx, wy, RUBBLE); continue; }
+      const m = rnd() < 0.22 ? BONEBIT : FLESH;
+      if (toHand) goreBit(wx, wy, (rnd() - 0.5) * 1.2, -0.3 - rnd() * 0.6, m, 1, (rnd() * 4) | 0);
+      else placeCell(wx, wy, m);
+      if (rnd() < 0.3) spawnDrop(wx, wy, (rnd() - 0.5) * 2.4, -0.6 - rnd() * 2, BLOOD);
+    }
+    if (cause !== 'fire') {
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      for (let k = 0; k < 10; k++) spawnDrop(cx, cy, (rnd() - 0.5) * 3, -0.8 - rnd() * 2.4, BLOOD);
+      for (let k = 0; k < 2; k++) puff(cx, cy, 'mist');
+    }
+    separateAll(rag);
+  }
+  function dmgSeg(rag, sg, amt, hx, hy, dx, dy, cause) {
+    if (sg.gone) return;
+    sg.hp -= amt;
+    if (rnd() < amt) spawnDrop(hx, hy, dx * 1.2 + (rnd() - 0.5), dy * 1.2 - 0.5 - rnd(), BLOOD);
+    if (sg.hp <= 0) gib(rag, sg, cause);
+  }
+  function segCenter(rag, sg) { const a = rag.pts[sg.a], b = rag.pts[sg.b]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+
+  // a living body dies: it becomes a ragdoll, joints tear loose, and the wounds pump
+  function kill(e, hx, hy, dx, dy) {
+    const k = foes.indexOf(e); if (k >= 0) foes.splice(k, 1);
+    const pz = pose(e), cause = e.cause || 'dig';
+    const kick = cause === 'harvest' ? 0.05 : 0.7;             // a blow throws the body; Harvest doesn't fling it at you
+    const rag = makeRag(pz, e.vx + dx * kick, e.vy + dy * kick - (cause === 'harvest' ? 0.1 : 0.6), 'crusader', e.face, e.marks);
+    const c = chestOf(e);
+    for (let n = 0; n < 30; n++) {                          // the killing blow: a great burst of blood
+      const ang = -Math.PI / 2 + (dx >= 0 ? 0.5 : -0.5) + (rnd() - 0.5) * 2.2, sp = 1.2 + rnd() * 2.8;
+      spawnDrop(c.x + (rnd() - 0.5) * 2, c.y + (rnd() - 0.5) * 4, Math.cos(ang) * sp, Math.sin(ang) * sp, BLOOD);
+    }
+    for (let n = 0; n < 4; n++) puff(c.x + (rnd() - 0.5) * 3, c.y + (rnd() - 0.5) * 4, 'mist');
+    const hitK = nearestSeg(pz, hx, hy), chance = SEVER[cause] ?? 0.3;
+    for (const sg of rag.segs) {
+      if (sg.k === 'torso') continue;
+      if (rnd() < (sg.k === hitK && cause !== 'harvest' ? 0.85 : chance)) detach(rag, sg, 1.2);   // Harvest kills leave the body whole
+    }
+    const hitSeg = rag.segs.find(sg => sg.k === hitK);
+    if (cause === 'dig' && hitSeg && rnd() < 0.5) gib(rag, hitSeg, 'dig');       // the part the beam struck is blown apart
+    // the wound in the chest pumps whether or not anything came off
+    const torso = rag.segs.find(sg => sg.k === 'torso');
+    if (torso && !torso.gone) spurtAt(rag, torso.b, torso.a, torso, 1.1, 8 + ((rnd() * 5) | 0));
+  }
+
+  function stepRags() {
+    for (let r = rags.length - 1; r >= 0; r--) {
+      const rag = rags[r];
+      if (rag.segs.every(sg => sg.gone)) { rags.splice(r, 1); continue; }
+      rag.age++;
+      // move the joints (verlet), let the world push them about, and keep them out of the ground
+      const used = new Set(), mass = {};
+      for (const sg of rag.segs) if (!sg.gone) {
+        used.add(sg.a); used.add(sg.b);
+        const hw = (WEIGHT[sg.k] || 1) / 2;
+        mass[sg.a] = (mass[sg.a] || 0) + hw; mass[sg.b] = (mass[sg.b] || 0) + hw;
+      }
+      for (const pi of used) {
+        const p = rag.pts[pi];
+        let vx = (p.x - p.px) * 0.985, vy = (p.y - p.py) * 0.985 + RAG.gravity;
+        const cx = Math.floor(p.x), cy = Math.floor(p.y);
+        if (cx >= 0 && cx < W && cy >= 0 && cy < H) {
+          const q = cy * W + cx;
+          if (harvesting && coneMark[q] === coneTick) {
+            // the dead are heavy: in Harvest's pull a body drags in slowly, only a little quicker than the living
+            const lm = 1 / Math.max(0.5, mass[pi] || 1);       // a hand (light) is pulled much harder than the hips (heavy)
+            vx = vx * RAG.drag + windX[q] * RAG.pull * lm;
+            vy = vy * RAG.drag + windY[q] * RAG.pull * lm;
+          } else vx += windX[q] * 0.11;
+          vx += isOpen(q) ? windGlobal * 0.15 : 0;
+          if (!(harvesting && coneMark[q] === coneTick)) vy += windY[q] * 0.11;
+          if (KIND[type[q]] === K_LIQUID) { vx *= 0.85; vy = vy * 0.85 - 0.13; }   // they float, more or less
+        }
+        const held = inPull(p.x, p.y) || inPull(p.x, p.y - 1);
+        if (held) {                                            // in the pull: lifted a single cell clear of the ground
+          if (solidAt(p.x, p.y + 1)) { if (!solidAt(p.x, p.y - 1)) p.y -= 1; if (vy > 0) vy = 0; }
+          else if (solidAt(p.x, p.y + 2) && vy > 0) vy = 0;   // hovering: gravity doesn't drag it back down
+        }
+        const sp = Math.hypot(vx, vy); if (sp > 4) { vx *= 4 / sp; vy *= 4 / sp; }
+        let nx = p.x + vx, ny = p.y + vy, nvx = vx, nvy = vy;
+        if (solidAt(nx, ny)) {
+          let rode = false;
+          if (held) for (let k = 1; k <= 3; k++) if (!solidAt(nx, ny - k)) { ny -= k; rode = true; break; }   // rides up over a bump
+          if (!rode) {
+            if (!solidAt(nx, p.y)) { ny = p.y; nvy = 0; nvx *= held ? 1 : 0.65; }     // hit the ground: slide and drag
+            else if (!solidAt(p.x, ny)) { nx = p.x; nvx = 0; }
+            else { nx = p.x; ny = p.y; nvx = 0; nvy = 0; }
+          }
+        }
+        p.x = nx; p.y = ny; p.px = nx - nvx; p.py = ny - nvy;
+      }
+      // keep every bone its length; keep the head on straight while it's still attached
+      for (let it = 0; it < 4; it++) {
+        for (const sg of rag.segs) {
+          if (sg.gone) continue;
+          const a = rag.pts[sg.a], b = rag.pts[sg.b];
+          const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.001, f = (d - sg.len) / d * 0.5;
+          a.x += dx * f; a.y += dy * f; b.x -= dx * f; b.y -= dy * f;
+        }
+        const torso = rag.segs[0], head = rag.segs[1];
+        if (!torso.gone && !head.gone && head.a === torso.b) {
+          const a = rag.pts[torso.a], b = rag.pts[head.b], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.001;
+          const lo = RIG.torso + RIG.head - 3, hi = RIG.torso + RIG.head;
+          if (d < lo || d > hi) { const tgt = d < lo ? lo : hi, f = (d - tgt) / d * 0.25; a.x += dx * f; a.y += dy * f; b.x -= dx * f; b.y -= dy * f; }
+        }
+        for (const pi of used) {                             // nothing ends up inside the ground
+          const p = rag.pts[pi];
+          if (solidAt(p.x, p.y)) { if (!solidAt(p.x, p.y - 1)) p.y = Math.floor(p.y) - 0.01; else { p.x = p.px; p.y = p.py; } }
+        }
+      }
+      // the world works on each piece: fire chars it, and loose pieces drip
+      for (const sg of rag.segs) {
+        if (sg.gone) continue;
+        const c = segCenter(rag, sg), q = Math.floor(c.y) * W + Math.floor(c.x);
+        if (q >= 0 && q < N && heat[q] > 6) dmgSeg(rag, sg, (heat[q] - 6) * 0.03, c.x, c.y, 0, -1, 'fire');
+        if (!sg.gone && rag.age < 900 && rnd() < 0.006) spawnDrop(c.x, c.y, (rnd() - 0.5) * 0.4, 0.3, BLOOD);
+      }
+      // severed ends and stumps pump in a heartbeat rhythm
+      for (let k = rag.spurts.length - 1; k >= 0; k--) {
+        const s = rag.spurts[k];
+        if (s.sg.gone) { rag.spurts.splice(k, 1); continue; }
+        s.t++;
+        const ph = s.t % WOUND.beat, lub = ph < 5, dub = ph >= 9 && ph < 12;
+        if (lub || dub) {
+          const p = rag.pts[s.pi], q = rag.pts[s.from];
+          let dx = p.x - q.x, dy = p.y - q.y - 0.8;
+          const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+          const f = s.str * (lub ? 1 : 0.55);
+          for (let n = 0; n < WOUND.perTick; n++) {
+            const ang = Math.atan2(dy, dx) + (rnd() - 0.5) * WOUND.spread * 2;
+            const spd = (WOUND.speed[0] + rnd() * (WOUND.speed[1] - WOUND.speed[0])) * f;
+            spawnDrop(p.x, p.y, Math.cos(ang) * spd, Math.sin(ang) * spd, BLOOD);
+          }
+        }
+        if (ph === WOUND.beat - 1) { s.beats++; s.str *= 0.86; if (s.beats >= s.pulses) rag.spurts.splice(k, 1); }
+      }
+    }
+  }
+  function drawRags(sx, sy) {
+    for (const rag of rags) {
+      const L = LOOK[rag.look];
+      for (const k of DRAW_ORDER) {
+        const sg = rag.segs.find(s => s.k === k);
+        if (!sg || sg.gone) continue;
+        drawSeg(rag.pts[sg.a], rag.pts[sg.b], L[sprKey(k)], L.pal, rag.face < 0, null, sg.marks, sx, sy, sg.torn);
+      }
+    }
+  }
+  // which piece of which ragdoll is at this point
+  function ragAt(x, y, pad) {
+    for (const rag of rags) for (const sg of rag.segs) {
+      if (sg.gone) continue;
+      if (distToSeg(x, y, rag.pts[sg.a], rag.pts[sg.b]) < (sg.k === 'torso' ? 2.6 : 1.4) + (pad || 0)) return { rag, sg };
+    }
+    return null;
+  }
+
+  function tick() {
+    updatePlayer();
+    if (spell === 'dig') { harvesting = false; harvestAt = null; castDig(); }
+    else { beam = null; castHarvest(); }
+    stepGore();
+    stepChunks();
+    stepWounds();
+    stepFoes();
+    stepRags();
+    if (!casting) { if (++idle > MANA_DELAY) mana = Math.min(MANA_MAX, mana + MANA_REGEN / 60); }
+    step();
+    stepFx();
+  }
+
+  // ---------- drawing over the world ----------
+  const BEAM_CORE = [214, 255, 190], BEAM_HALO = [150, 90, 210];
+  function shadeWorldFx() {
+    // body matter being pulled apart shivers and reddens
+    for (let i = 0; i < N; i++) {
+      const v = hv[i]; if (!v) continue;
+      const t = type[i], soft = HSOFT[t]; if (!soft) { hv[i] = 0; continue; }
+      const a = Math.min(0.7, v / soft * 0.8) * (0.7 + rnd() * 0.3), b = t * 12 + (shade[i] >> 6) * 3, ia = 1 - a;
+      px[i] = pack((PAL_RGB[b] * ia + 190 * a) | 0, (PAL_RGB[b + 1] * ia + 30 * a) | 0, (PAL_RGB[b + 2] * ia + 50 * a) | 0);
+      gpx[i] = pack(40, 4, 8);
+      if (!harvesting) hv[i] *= 0.97;                          // let go, and it knits back together
+    }
+    for (const g of gore) {
+      const cx = Math.floor(g.x), cy = Math.floor(g.y);
+      if (cx >= 0 && cx < W && cy >= 0 && cy < H) gpx[cy * W + cx] = pack(70, 8, 16);
+    }
+    for (const f of fx) {                                    // the wind streaks glow faintly teal
+      if (!f.wind) continue;
+      const cx = Math.floor(f.x), cy = Math.floor(f.y);
+      if (cx >= 0 && cx < W && cy >= 0 && cy < H && !gpx[cy * W + cx]) gpx[cy * W + cx] = pack(16, 52, 48);
+    }
+    // cells the beam has worn down show it: they go pale and cracked
+    for (let i = 0; i < N; i++) {
+      const d = dmg[i]; if (!d) continue;
+      const t = type[i], h = HARD[t]; if (!h) { dmg[i] = 0; continue; }
+      const a = Math.min(0.65, d / h * 0.75), b = t * 12 + (shade[i] >> 6) * 3, ia = 1 - a;
+      px[i] = pack((PAL_RGB[b] * ia + 205 * a) | 0, (PAL_RGB[b + 1] * ia + 225 * a) | 0, (PAL_RGB[b + 2] * ia + 190 * a) | 0);
+      dmg[i] *= 0.998;                                       // left alone, the wear slowly settles
+    }
+    // the beam lights up the dark around it
+    if (beam) {
+      const len = Math.hypot(beam.x1 - beam.x0, beam.y1 - beam.y0);
+      for (let s = 0; s <= len; s += 1) {
+        const cx = Math.floor(beam.x0 + beam.dx * s), cy = Math.floor(beam.y0 + beam.dy * s);
+        if (cx < 0 || cx >= W || cy < 0 || cy >= H) break;
+        gpx[cy * W + cx] = pack(60, 90, 70);
+      }
+      const ex = Math.floor(beam.x1), ey = Math.floor(beam.y1);
+      for (let oy = -4; oy <= 4; oy++) for (let ox = -4; ox <= 4; ox++) {
+        const cx = ex + ox, cy = ey + oy; if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+        gpx[cy * W + cx] = pack(110, 150, 120);
+      }
+    }
+    for (const f of fx) {
+      if (!f.glow) continue;
+      const cx = Math.floor(f.x), cy = Math.floor(f.y);
+      if (cx >= 0 && cx < W && cy >= 0 && cy < H) gpx[cy * W + cx] = pack(120, 180, 100);
+    }
+  }
+
+  function drawOverlay(dw, dh) {
+    const sx = dw / W, sy = dh / H;
+    // the beam
+    if (beam) {
+      const x0 = beam.x0 * sx, y0 = beam.y0 * sy, x1 = beam.x1 * sx, y1 = beam.y1 * sy;
+      vctx.save();
+      vctx.globalCompositeOperation = 'lighter';
+      vctx.lineCap = 'round';
+      const wob = () => (rnd() - 0.5) * sx * 0.9;
+      const segs = 8;
+      const path = () => {
+        vctx.beginPath(); vctx.moveTo(x0, y0);
+        for (let k = 1; k < segs; k++) vctx.lineTo(x0 + (x1 - x0) * k / segs + wob(), y0 + (y1 - y0) * k / segs + wob());
+        vctx.lineTo(x1, y1);
+      };
+      vctx.strokeStyle = `rgba(${BEAM_HALO[0]},${BEAM_HALO[1]},${BEAM_HALO[2]},0.28)`; vctx.lineWidth = sx * 3.2; path(); vctx.stroke();
+      vctx.strokeStyle = `rgba(${BEAM_CORE[0]},${BEAM_CORE[1]},${BEAM_CORE[2]},0.75)`; vctx.lineWidth = Math.max(1, sx * 0.9); path(); vctx.stroke();
+      if (beam.hit || beam.wall) {
+        const r = sx * (2.2 + rnd() * 0.8);
+        const g = vctx.createRadialGradient(x1, y1, 0, x1, y1, r * 1.8);
+        g.addColorStop(0, 'rgba(214,255,190,0.85)'); g.addColorStop(0.4, 'rgba(150,90,210,0.35)'); g.addColorStop(1, 'rgba(150,90,210,0)');
+        vctx.fillStyle = g; vctx.beginPath(); vctx.arc(x1, y1, r * 1.8, 0, Math.PI * 2); vctx.fill();
+      }
+      vctx.restore();
+    }
+    // dust and sparks
+    for (const f of fx) {
+      const a = Math.min(1, f.life / 12);
+      if (f.wind) {
+        vctx.strokeStyle = `rgba(${f.r},${f.g},${f.bl},${(a * 0.4).toFixed(3)})`; vctx.lineWidth = Math.max(1, sx * 0.5);
+        vctx.beginPath(); vctx.moveTo(f.px * sx, f.py * sy); vctx.lineTo(f.x * sx, f.y * sy); vctx.stroke();
+        continue;
+      }
+      if (f.mist) {
+        vctx.fillStyle = `rgba(${f.r},${f.g},${f.bl},${(a * 0.22).toFixed(3)})`;
+        vctx.beginPath(); vctx.arc(f.x * sx, f.y * sy, f.size * sx, 0, Math.PI * 2); vctx.fill();
+        continue;
+      }
+      vctx.fillStyle = `rgba(${f.r},${f.g},${f.bl},${a.toFixed(2)})`;
+      vctx.fillRect(Math.floor(f.x) * sx, Math.floor(f.y) * sy, sx, sy);
+    }
+    // the cone of the pull: a faint teal fan from the palm
+    if (harvesting && harvestCone) {
+      const c = harvestCone, base = Math.atan2(c.dy, c.dx);
+      vctx.save(); vctx.globalCompositeOperation = 'lighter';
+      const gr = vctx.createRadialGradient(c.x * sx, c.y * sy, 0, c.x * sx, c.y * sy, HARV.range * sx);
+      gr.addColorStop(0, 'rgba(90,210,195,0.13)'); gr.addColorStop(1, 'rgba(60,170,160,0)');
+      vctx.fillStyle = gr;
+      vctx.beginPath(); vctx.moveTo(c.x * sx, c.y * sy);
+      vctx.arc(c.x * sx, c.y * sy, HARV.range * sx, base - HARV.cone, base + HARV.cone); vctx.closePath(); vctx.fill();
+      vctx.restore();
+    }
+    // chunks being hauled in, tumbling
+    for (const c of chunks) {
+      const cs = Math.cos(c.ang), sn = Math.sin(c.ang);
+      for (const p of c.pix) {
+        const wx = c.x + p.ox * cs - p.oy * sn, wy = c.y + p.ox * sn + p.oy * cs;
+        vctx.fillStyle = `rgb(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]})`;
+        vctx.fillRect((wx - 0.6) * sx, (wy - 0.6) * sy, sx * 1.2, sy * 1.2);
+      }
+    }
+    // gore on its way to the hand
+    for (const g of gore) {
+      vctx.strokeStyle = `rgba(${g.r},${g.g},${g.bl},0.45)`;
+      vctx.lineWidth = Math.max(1, sx * 0.6);
+      vctx.beginPath(); vctx.moveTo(g.px * sx, g.py * sy); vctx.lineTo(g.x * sx, g.y * sy); vctx.stroke();
+      vctx.fillStyle = `rgb(${g.r},${g.g},${g.bl})`;
+      vctx.fillRect(Math.floor(g.x) * sx, Math.floor(g.y) * sy, sx, sy);
+    }
+    // the dead
+    drawRags(sx, sy);
+    // the living
+    for (const e of foes) {
+      const pz = pose(e);
+      drawRig(pz, 'crusader', e.face, e.flash ? '#e07a7a' : null, e.marks, sx, sy);
+      if (e.armF) {                                            // the sword, raised toward you
+        const hd = pz.handF;
+        vctx.fillStyle = '#c8cad2';
+        for (let k = 1; k <= 7; k++) vctx.fillRect((hd.x + e.armF.x * k - 0.5) * sx, (hd.y + e.armF.y * k - 0.5) * sy, sx, sy);
+        vctx.fillStyle = '#8a6a2a';
+        vctx.fillRect((hd.x - e.armF.y * 1.2 - 0.5) * sx, (hd.y + e.armF.x * 1.2 - 0.5) * sy, sx, sy);
+        vctx.fillRect((hd.x + e.armF.y * 1.2 - 0.5) * sx, (hd.y - e.armF.x * 1.2 - 0.5) * sy, sx, sy);
+      }
+      if (e.hp < FOE.hp) {                                     // what's left of them
+        const bw = 7 * sx, bx = (e.x - 3.5) * sx, by = (e.y - e.h - 2.5) * sy;
+        vctx.fillStyle = 'rgba(11,9,12,.75)'; vctx.fillRect(bx, by, bw, sy * 0.9);
+        vctx.fillStyle = '#b0263a'; vctx.fillRect(bx, by, bw * Math.max(0, e.hp) / FOE.hp, sy * 0.9);
+      }
+    }
+    // the necromancer, his staff, and the reaching hand
+    const pzP = pose(P);
+    drawRig(pzP, 'necro', P.face, null, null, sx, sy);
+    const tip = staffTip(), hdF = pzP.handF;
+    vctx.fillStyle = '#5a3e28';
+    for (let y2 = Math.round(tip.y) + 1; y2 <= Math.round(hdF.y) + 3; y2++) vctx.fillRect((Math.round(hdF.x) - 0.5) * sx + sx * 0.5 - sx * 0.5, y2 * sy, Math.ceil(sx), Math.ceil(sy));
+    vctx.fillStyle = casting && mana > 0 && spell === 'dig' ? '#e6ffd0' : '#9fd27a';
+    vctx.fillRect((Math.round(tip.x) - 0.5) * sx, Math.round(tip.y - 0.5) * sy, sx * 2, sy * 1.6);
+    if (harvesting) {
+      const h = handPos();
+      vctx.save(); vctx.globalCompositeOperation = 'lighter';
+      const r = sx * (3 + handFlash * 0.4 + rnd() * 0.6);
+      const gr = vctx.createRadialGradient(h.x * sx, h.y * sy, 0, h.x * sx, h.y * sy, r);
+      gr.addColorStop(0, 'rgba(220,60,80,0.55)'); gr.addColorStop(1, 'rgba(120,10,30,0)');
+      vctx.fillStyle = gr; vctx.beginPath(); vctx.arc(h.x * sx, h.y * sy, r, 0, Math.PI * 2); vctx.fill();
+      vctx.restore();
+    }
+    // aim: a small reticle; while painting, the brush outline
+    if (hover) {
+      if (painting || ((keys.ShiftLeft || keys.ShiftRight) && !casting)) {
+        vctx.strokeStyle = testTool === ERASE ? 'rgba(201,90,90,.75)' : 'rgba(221,210,191,.6)';
+        vctx.lineWidth = Math.max(1, dpr);
+        vctx.beginPath();
+        vctx.ellipse((hover.x + 0.5) * sx, (hover.y + 0.5) * sy, brush * sx, brush * sy, 0, 0, Math.PI * 2);
+        vctx.stroke();
+      } else {
+        const ax = aim.x * sx, ay = aim.y * sy, r = sx * 1.6;
+        vctx.strokeStyle = spell === 'harvest' ? 'rgba(230,110,120,.6)' : 'rgba(201,255,170,.55)'; vctx.lineWidth = Math.max(1, dpr);
+        vctx.beginPath();
+        vctx.moveTo(ax - r * 1.8, ay); vctx.lineTo(ax - r * 0.6, ay); vctx.moveTo(ax + r * 0.6, ay); vctx.lineTo(ax + r * 1.8, ay);
+        vctx.moveTo(ax, ay - r * 1.8); vctx.lineTo(ax, ay - r * 0.6); vctx.moveTo(ax, ay + r * 0.6); vctx.lineTo(ax, ay + r * 1.8);
+        vctx.stroke();
+      }
+    }
+    // mana
+    const bw = Math.min(dw * 0.28, 220 * dpr), bh = 7 * dpr, bx = 12 * dpr, by = 12 * dpr;
+    vctx.fillStyle = 'rgba(11,9,12,.75)'; vctx.fillRect(bx - 2 * dpr, by - 2 * dpr, bw + 4 * dpr, bh + 4 * dpr);
+    vctx.fillStyle = '#2a2230'; vctx.fillRect(bx, by, bw, bh);
+    vctx.fillStyle = mana < DIG.cost * 0.5 ? '#8a3a4a' : '#8f6bc9'; vctx.fillRect(bx, by, bw * mana / MANA_MAX, bh);
+    vctx.fillStyle = 'rgba(221,210,191,.85)'; vctx.font = `${10 * dpr}px "IBM Plex Mono", monospace`;
+    vctx.fillText('MANA ' + Math.round(mana) + '   ' + (spell === 'dig' ? 'DIG' : 'HARVEST'), bx, by + bh + 12 * dpr);
+    let ix = bx;
+    for (const [t, name] of RELIC) {
+      const c = PAL_RGB.subarray(t * 12, t * 12 + 3);
+      vctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; vctx.fillRect(ix, by + bh + 19 * dpr, 7 * dpr, 7 * dpr);
+      vctx.fillStyle = 'rgba(221,210,191,.85)'; const txt = String(Math.floor(inv[t]));
+      vctx.fillText(txt, ix + 10 * dpr, by + bh + 26 * dpr);
+      ix += (16 + txt.length * 7) * dpr;
+    }
+  }
+
+  // ---------- input ----------
+  const TEST = [
+    [BLOOD, 'Blood'], [HOLY, 'Holy Water'], [ICHOR, 'Ichor'], [TALLOW, 'Tallow'], [FIRE, 'Fire (torch)'], [MIASMA, 'Miasma'],
+    [DIRT, 'Grave Dirt'], [EARTH, 'Packed Earth'], [STONE, 'Crypt Stone'], [BONE, 'Bone'], [WOOD, 'Coffin Wood'], [FLESH, 'Flesh'], [ERASE, 'Eraser'],
+  ];
+  let testTool = BLOOD, brush = 4, paused = false, painting = false, hover = null, last = null;
+  const FILL = { [K_STATIC]: 1, [K_POWDER]: 0.45, [K_LIQUID]: 0.5, [K_GAS]: 0.3 };
+  const selEl = document.getElementById('testmat');
+  TEST.forEach(([id, name]) => { const o = document.createElement('option'); o.value = id; o.textContent = name; selEl.appendChild(o); });
+  selEl.value = String(BLOOD);
+  selEl.addEventListener('change', () => { testTool = +selEl.value; });
+
+  function paintAt(cx, cy) {
+    const r = brush, rr = r * r + r * 0.6, t = testTool;
+    const fill = t === ERASE ? 1 : t === FIRE ? 0 : (FILL[KIND[t]] || 1);
+    for (let dy = -r; dy <= r; dy++) {
+      const y = cy + dy; if (y < 0 || y >= H) continue;
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > rr) continue;
+        const x = cx + dx; if (x < 0 || x >= W) continue;
+        const i = y * W + x, tt = type[i];
+        if (t === ERASE) { if (tt && tt !== BEDROCK) set(i, EMPTY); continue; }
+        if (t === FIRE) {
+          heat[i] += 2.2;
+          if ((tt === EMPTY || KIND[tt] === K_GAS) && rnd() < 0.18) setFlame(i, 14, 30);
+          continue;
+        }
+        if (tt !== EMPTY && KIND[tt] !== K_GAS) continue;
+        if (rnd() < fill) set(i, t);
+      }
+    }
+  }
+  function strokeTo(p) {
+    if (!last) { paintAt(p.x, p.y); last = p; return; }
+    const n = Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / Math.max(1, brush * 0.5)));
+    for (let s = 1; s <= n; s++) paintAt(Math.round(last.x + (p.x - last.x) * s / n), Math.round(last.y + (p.y - last.y) * s / n));
+    last = p;
+  }
+  function cellPos(e) {
+    const r = view.getBoundingClientRect();
+    const fx0 = (e.clientX - r.left) / r.width * W, fy0 = (e.clientY - r.top) / r.height * H;
+    return { fx: Math.max(0, Math.min(W - 0.01, fx0)), fy: Math.max(0, Math.min(H - 0.01, fy0)) };
+  }
+  view.addEventListener('contextmenu', e => e.preventDefault());
+  view.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { view.focus({ preventScroll: true }); window.focus(); } catch (_) {}   // the click must hand us the keyboard
+    try { view.setPointerCapture(e.pointerId); } catch (_) {}
+    const p = cellPos(e);
+    aim.x = p.fx; aim.y = p.fy; hover = { x: Math.floor(p.fx), y: Math.floor(p.fy) };
+    if (e.button === 2 || e.shiftKey) { painting = true; last = null; strokeTo(hover); }
+    else casting = true;
+  });
+  view.addEventListener('pointermove', e => {
+    const p = cellPos(e);
+    aim.x = p.fx; aim.y = p.fy; hover = { x: Math.floor(p.fx), y: Math.floor(p.fy) };
+    if (painting) strokeTo(hover);
+  });
+  const end = () => { casting = false; painting = false; last = null; };
+  view.addEventListener('pointerup', end);
+  view.addEventListener('pointercancel', end);
+  view.addEventListener('pointerleave', () => { if (!casting && !painting) hover = null; });
+
+  const brushEl = document.getElementById('brush'), brushOut = document.getElementById('brush-out');
+  function setBrush(v) { brush = Math.max(1, Math.min(16, v)); brushEl.value = brush; brushOut.textContent = brush; }
+  brushEl.addEventListener('input', () => setBrush(+brushEl.value));
+  const windEl = document.getElementById('wind'), windOut = document.getElementById('wind-out');
+  windEl.addEventListener('input', () => {
+    const v = +windEl.value;
+    windGlobal = v * 0.035;
+    windOut.textContent = v === 0 ? 'calm' : (v < 0 ? '← ' : '→ ') + Math.abs(v);
+  });
+  const pausedEl = document.getElementById('paused');
+  function setPaused(p) { paused = p; pausedEl.hidden = !p; }
+  document.getElementById('b-regen').addEventListener('click', () => { generate(); view.focus(); });
+  document.getElementById('b-foe').addEventListener('click', () => { spawnFoe(Math.floor(P.x + P.face * 40)); view.focus(); });
+
+  window.addEventListener('keydown', e => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const c = e.code;
+    keys[c] = true;
+    if (c === 'Space' || c.startsWith('Arrow') || c === 'KeyW' || c === 'KeyA' || c === 'KeyS' || c === 'KeyD') e.preventDefault();
+    if (c === 'KeyC' && !e.repeat) spawnFoe(Math.floor(aim.x));
+    else if (c === 'Digit1') chooseSpell('dig');
+    else if (c === 'Digit2') chooseSpell('harvest');
+    else if (c === 'KeyP') setPaused(!paused);
+    else if (c === 'KeyR' && !e.repeat) generate();
+    else if (c === 'BracketLeft') setBrush(brush - 1);
+    else if (c === 'BracketRight') setBrush(brush + 1);
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; casting = false; painting = false; });
+
+  // ---------- readout & loop ----------
+  const roXY = document.getElementById('ro-xy'), roMat = document.getElementById('ro-mat'),
+        roF = document.getElementById('ro-fps'), roMana = document.getElementById('ro-mana'),
+        hintEl = document.getElementById('focus-hint');
+  function cellName(i) {
+    const t = type[i];
+    if (t === EMPTY) return 'empty';
+    if (t === SPOUT) return DEF[aux[i]].name + ' spout';
+    if (t === FIRE) return 'Flame';
+    let n = DEF[t].name;
+    if (burn[i] && t !== EMBER) n = 'Burning ' + n.toLowerCase();
+    if (dmg[i] > 0 && HARD[t]) n += ' · worn ' + Math.min(99, Math.round(dmg[i] / HARD[t] * 100)) + '%';
+    if (hv[i] > 0 && HSOFT[t]) n += ' · coming apart ' + Math.min(99, Math.round(hv[i] / HSOFT[t] * 100)) + '%';
+    return n;
+  }
+
+  // ---------- spell switching, the spell card, the speed table and the reliquary ----------
+  const SPELLS = {
+    dig: {
+      name: 'Dig', cost: () => DIG.cost, range: () => DIG.range,
+      desc: 'A channelled beam of grave-rot that wears down whatever it touches until it crumbles. Earth falls away as loose dirt, stone as rubble, and anything that was once a body bursts.',
+      head: 'How fast it bites',
+      cap: 'Time to cut one cell at the heart of the beam. The edges of the beam bite slower, which is what gives a tunnel its width.',
+      rows: [[DIRT, 'Grave Dirt'], [FLESH, 'Flesh'], [EARTH, 'Packed Earth'], [WOOD, 'Coffin Wood'], [BONE, 'Bone'], [STONE, 'Crypt Stone']],
+      secs: t => HARD[t] / DIG.power / 60, never: 'Bedrock',
+    },
+    harvest: {
+      name: 'Harvest', cost: () => HARV.cost, range: () => HARV.range,
+      desc: 'A wind out of the grave, rushing straight into your outstretched hand from everything in front of you. Bodies are pulled apart: limbs tear off at the joints, the pieces break into chunks, and the chunks are torn smaller and smaller as they fly at you, until the last scraps vanish into your palm. Plate is shed along the way and blood is lifted off the ground. Earth, stone and coffin wood break the wind; whatever is behind them is spared.',
+      head: 'How fast it rends',
+      cap: 'Time to cut one exposed cell loose close to the hand. Toward the edge of the cone it takes about twice as long, and anything shielded behind other flesh waits its turn.',
+      rows: [[BLOOD, 'Blood'], [TALLOW, 'Fat'], [FLESH, 'Flesh'], [BONEBIT, 'Bone Shards'], [BONE, 'Bone']],
+      secs: t => HSOFT[t] / HARV.power / 60, never: 'Earth, stone, wood',
+    },
+  };
+  const slotEls = Array.from(document.querySelectorAll('.slot[data-spell]'));
+  const biteEl = document.getElementById('bite');
+  function chooseSpell(id) {
+    spell = id; casting = false;
+    const sp = SPELLS[id];
+    slotEls.forEach(el => { const on = el.dataset.spell === id; el.classList.toggle('on', on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    document.getElementById('sp-name').textContent = sp.name;
+    document.getElementById('sp-desc').textContent = sp.desc;
+    document.getElementById('sp-cost').textContent = sp.cost();
+    document.getElementById('sp-range').textContent = sp.range();
+    document.getElementById('bite-h').textContent = sp.head;
+    document.getElementById('bite-cap').textContent = sp.cap;
+    biteEl.innerHTML = '';
+    const maxS = Math.max(...sp.rows.map(([t]) => sp.secs(t)));
+    sp.rows.forEach(([t, name]) => {
+      const tr = document.createElement('tr'), secs = sp.secs(t);
+      tr.innerHTML = '<td></td><td class="num"></td><td class="bar"><span></span></td>';
+      tr.children[0].textContent = name;
+      tr.children[1].textContent = secs.toFixed(2) + ' s';
+      tr.querySelector('span').style.width = Math.max(3, secs / maxS * 100) + '%';
+      biteEl.appendChild(tr);
+    });
+    const tn = document.createElement('tr');
+    tn.innerHTML = '<td></td><td class="num">never</td><td class="bar"></td>';
+    tn.children[0].textContent = sp.never;
+    biteEl.appendChild(tn);
+  }
+  slotEls.forEach(el => el.addEventListener('click', () => { chooseSpell(el.dataset.spell); view.focus({ preventScroll: true }); }));
+
+  const reliqEl = document.getElementById('reliq'), relicEls = {};
+  RELIC.forEach(([t, name]) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="sw"></span><span></span><span class="n">0</span>';
+    const c = PAL_RGB.subarray(t * 12, t * 12 + 3);
+    li.children[0].style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+    li.children[1].textContent = name;
+    reliqEl.appendChild(li);
+    relicEls[t] = li;
+  });
+  const bumpT = {};
+  function bump(t) { bumpT[t] = 12; }
+  function showRelics() {
+    for (const [t] of RELIC) {
+      const li = relicEls[t];
+      li.children[2].textContent = Math.floor(inv[t]);
+      if (bumpT[t]) { bumpT[t]--; li.classList.add('bump'); } else li.classList.remove('bump');
+    }
+  }
+  chooseSpell('dig');
+
+  generate();
+  for (let s = 0; s < 30; s++) step();
+
+  let acc = 0, prev = performance.now(), frames = 0, fpsT = prev;
+  const DT = 1000 / 60;
+  function loop(now) {
+    const dt = Math.min(100, now - prev); prev = now;
+    if (painting && hover && !paused) paintAt(hover.x, hover.y);
+    if (!paused) {
+      acc += dt;
+      let n = 0;
+      while (acc >= DT && n < 3) { tick(); acc -= DT; n++; }
+      if (n === 3) acc = 0;
+    }
+    render();
+    frames++;
+    if (now - fpsT >= 500) { roF.textContent = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; }
+    roMana.textContent = Math.round(mana) + ' / ' + MANA_MAX;
+    showRelics();
+    if (frames % 15 === 0) { let f = true; try { f = document.hasFocus(); } catch (_) {} hintEl.hidden = f; }
+    if (hover) {
+      const hi = hover.y * W + hover.x;
+      roXY.textContent = hover.x + ', ' + hover.y;
+      const fe = foes.find(e => inFoe(e, hover.x + 0.5, hover.y + 0.5)), rp = fe ? null : ragAt(hover.x + 0.5, hover.y + 0.5, 0.5);
+      roMat.textContent = fe ? 'Crusader · ' + Math.max(1, Math.round(fe.hp)) + ' hp'
+                        : rp ? "Crusader's " + SEG_NAME[rp.sg.k] + ' · ' + Math.max(1, Math.round(rp.sg.hp)) + ' hp'
+                        : cellName(hi) + (heat[hi] >= 1 ? ' · heat ' + Math.round(heat[hi]) : '');
+    } else { roXY.textContent = '—'; roMat.textContent = '—'; }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unholy Assembly Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Alegreya+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a workbench. The pit (canvas) dominates; a narrow reagent kit sits to its right, stacking below on phones. Single dark look by design. */
+:root {
+  --bg: #110e12;
+  --surface: #1a1519;
+  --line: #2f272c;
+  --fg: #ddd2bf;
+  --muted: #92867c;
+  --accent: #c98a3b;
+  --blood: #9a2222;
+  --f-display: "Pirata One", "UnifrakturMaguntia", Georgia, serif;
+  --f-body: "Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-inline: 16px;
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 18px; }
+
+.top { display: grid; gap: 4px; }
+.eyebrow {
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+.eyebrow b { color: var(--accent); font-weight: 500; }
+h1 {
+  font-family: var(--f-display); font-weight: 400;
+  font-size: clamp(2.2rem, 4.4vw, 3.4rem); line-height: 1; margin: 0;
+  letter-spacing: .01em; text-wrap: balance;
+}
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.lede kbd, .kbd {
+  font-family: var(--f-mono); font-size: 11px; color: var(--fg);
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+  padding: 0 5px; background: var(--surface);
+}
+
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 920px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { display: grid; gap: 8px; min-width: 0; }
+.pit {
+  position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9;
+  border: 1px solid var(--line); background: #0b090c;
+  box-shadow: 0 0 0 4px #0b090c, 0 0 0 5px var(--line), 0 18px 40px rgba(0,0,0,.5);
+}
+.pit canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: none; }
+.pit::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 52%, rgba(0,0,0,.55) 100%);
+}
+.paused {
+  position: absolute; top: 10px; left: 12px; z-index: 1;
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); background: rgba(11,9,12,.8); padding: 3px 8px; border: 1px solid var(--line);
+}
+.readout {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  font-family: var(--f-mono); font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.readout span b { color: var(--fg); font-weight: 500; }
+
+.kit { display: grid; gap: 18px; min-width: 0; }
+.sec { display: grid; gap: 10px; }
+.sec + .sec { border-top: 1px solid var(--line); padding-top: 16px; }
+h2 {
+  font-family: var(--f-display); font-weight: 400; font-size: 1.5rem; line-height: 1;
+  margin: 0; color: var(--fg);
+}
+.mats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+@media (max-width: 920px) and (min-width: 560px) { .mats { grid-template-columns: repeat(4, 1fr); } }
+.mat {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  font: inherit; font-size: 14px; color: var(--fg); text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 2px;
+  padding: 6px 8px; cursor: pointer;
+}
+.mat:hover { border-color: #4a3f45; }
+.mat:focus-visible, .btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mat[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.mat .sw {
+  flex: none; width: 16px; height: 16px; border: 1px solid rgba(0,0,0,.6);
+  image-rendering: pixelated; background-size: 8px 8px;
+}
+.mat .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mat .k { font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
+
+.detail { display: grid; gap: 2px; min-height: 64px; }
+.detail .dn { font-family: var(--f-display); font-size: 1.35rem; line-height: 1.1; color: var(--accent); }
+.detail p { margin: 0; color: var(--muted); font-size: 14px; }
+
+.row { display: flex; align-items: center; gap: 10px; }
+.row label { font-size: 14px; flex: none; }
+.row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.row output { font-family: var(--f-mono); font-size: 12px; width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.btn {
+  font: inherit; font-size: 14px; color: var(--fg); cursor: pointer;
+  background: transparent; border: 1px solid var(--line); border-radius: 2px; padding: 6px 8px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.btn:hover { background: var(--surface); }
+.btn .kbd { font-size: 10px; }
+
+.rx { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 14px; }
+.rx li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.rx .op { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.rx .out { color: var(--accent); }
+.foot { font-size: 13px; color: var(--muted); margin: 0; max-width: 70ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow"><b>Unholy Assembly</b> · Prototype 01 · Falling-sand physics</div>
+    <h1>The Charnel Pit</h1>
+    <p class="lede">Pick a reagent and paint it into the pit. Left-click pours, right-click erases. Everything falls, flows, burns or rots on its own. <kbd>Space</kbd> pauses, <kbd>[</kbd> <kbd>]</kbd> resize the brush.</p>
+  </header>
+
+  <main class="bench">
+    <section class="stage" aria-label="Simulation">
+      <div class="pit">
+        <div class="paused" id="paused" hidden>Paused</div>
+        <canvas id="view" aria-label="Falling sand simulation. Click and drag to paint the selected reagent."></canvas>
+      </div>
+      <div class="readout" aria-live="off">
+        <span>cell <b id="ro-xy">—</b></span>
+        <span>under brush <b id="ro-mat">—</b></span>
+        <span>grains in motion <b id="ro-n">0</b></span>
+        <span>airborne droplets <b id="ro-s">0</b></span>
+        <span><b id="ro-fps">0</b> fps</span>
+        <span>grid <b>320 × 180</b></span>
+      </div>
+    </section>
+
+    <aside class="kit">
+      <div class="sec">
+        <h2>Reagents</h2>
+        <div class="mats" id="mats" role="group" aria-label="Reagents"></div>
+        <div class="detail" aria-live="polite">
+          <div class="dn" id="d-name"></div>
+          <p id="d-desc"></p>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="row">
+          <label for="brush">Brush</label>
+          <input type="range" id="brush" min="1" max="24" value="5">
+          <output id="brush-out" for="brush">5</output>
+        </div>
+        <div class="btns">
+          <button class="btn" id="b-pause" type="button"><span id="b-pause-l">Pause</span><span class="kbd">Space</span></button>
+          <button class="btn" id="b-step" type="button"><span>Step</span><span class="kbd">.</span></button>
+          <button class="btn" id="b-restore" type="button"><span>Restore scene</span><span class="kbd">R</span></button>
+          <button class="btn" id="b-clear" type="button"><span>Empty the pit</span><span class="kbd">C</span></button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>Known reactions</h2>
+        <ul class="rx" id="rx"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <p class="foot">The scene starts with three spouts running: blood into the vat, ichor onto the flesh heap, and holy water on the far right. The brazier burns forever. Restore the scene any time to put things back.</p>
+</div>
+
+<script>
+(() => {
+  // ---------- grid ----------
+  const W = 320, H = 180, N = W * H;
+  const EMPTY = 0, STONE = 1, DIRT = 2, ASH = 3, BONE = 4, FLESH = 5, WOOD = 6,
+        BLOOD = 7, HOLY = 8, ICHOR = 9, TALLOW = 10, FIRE = 11, SMOKE = 12,
+        STEAM = 13, MIASMA = 14, MUD = 15, SPOUT = 16, EMBER = 17, ERASE = 99;
+  const K_EMPTY = 0, K_STATIC = 1, K_POWDER = 2, K_LIQUID = 3, K_GAS = 4, K_FIRE = 5, K_SPOUT = 6;
+
+  // name, kind, density, flammability, dispersion, viscosity(skip chance), colors
+  const DEF = [];
+  function def(id, o) { DEF[id] = o; }
+  def(EMPTY,  { name: 'Empty', kind: K_EMPTY, dens: 0 });
+  def(STONE,  { name: 'Crypt Stone', kind: K_STATIC, dens: 99, c: ['#3b3a44','#34333c','#43414b','#2e2d35'] });
+  def(DIRT,   { name: 'Grave Dirt', kind: K_POWDER, dens: 2.5, c: ['#4a3526','#3f2d20','#56412f','#3a2a1d'] });
+  def(ASH,    { name: 'Ash', kind: K_POWDER, dens: 1.5, c: ['#6e6a66','#615d5a','#7a7672','#57534f'] });
+  def(BONE,   { name: 'Bone', kind: K_STATIC, dens: 99, c: ['#d8ccaa','#cbbd98','#e2d8bb','#bfb08a'] });
+  def(FLESH,  { name: 'Flesh', kind: K_POWDER, dens: 2.0, c: ['#8f5b5a','#7f4d4e','#9c6764','#754546'] });
+  def(WOOD,   { name: 'Coffin Wood', kind: K_STATIC, dens: 99, c: ['#4d3220','#432b1b','#573a26','#3b2618'] });
+  // disp: cells of sideways flow per tick. visc: chance to sit still a tick. spl: splashiness 0..1
+  // damp: share of velocity kept per tick while touching something (lower = thicker)
+  def(BLOOD,  { name: 'Blood', kind: K_LIQUID, dens: 1.06, disp: 8, visc: 0, spl: 0.8, damp: 0.94, c: ['#7d0f14','#6e0c11','#8a1419','#650a0f'] });
+  def(HOLY,   { name: 'Holy Water', kind: K_LIQUID, dens: 1.0, disp: 11, visc: 0, spl: 1, damp: 0.96, c: ['#5d7a96','#577390','#6886a2','#52708b'] });
+  def(ICHOR,  { name: 'Ichor', kind: K_LIQUID, dens: 1.3, disp: 3, visc: 0.35, spl: 0.18, damp: 0.78, c: ['#6f9a1e','#628a19','#7dab25','#587d15'] });
+  def(TALLOW, { name: 'Tallow', kind: K_LIQUID, dens: 0.9, disp: 6, visc: 0.08, spl: 0.55, damp: 0.9, c: ['#c9b37a','#bea86f','#d4bf86','#b49d64'] });
+  def(FIRE,   { name: 'Fire', kind: K_FIRE, dens: -0.5, c: ['#e0602a','#f4a03a','#ffd166','#a8331f'] });
+  def(SMOKE,  { name: 'Smoke', kind: K_GAS, dens: -3, rise: 0.7, life: [60, 140], a: 0.55, c: ['#3a3638'] });
+  def(STEAM,  { name: 'Steam', kind: K_GAS, dens: -2, rise: 0.85, life: [70, 160], a: 0.4, c: ['#b8c4cc'] });
+  def(MIASMA, { name: 'Miasma', kind: K_GAS, dens: -1, rise: 0.3, life: [400, 800], a: 0.5, c: ['#8a9a3a'] });
+  def(MUD,    { name: 'Mud', kind: K_POWDER, dens: 2.6, c: ['#2f2219','#29201a','#36281d','#241a14'] });
+  def(SPOUT,  { name: 'Spout', kind: K_SPOUT, dens: 99, c: ['#1f1c20'] });
+  def(EMBER,  { name: 'Ember', kind: K_POWDER, dens: 1.4, c: ['#c4471c','#a8331f','#e0602a','#7a2414'] });
+
+  // Burning. ign: heat a cell must soak up before it catches (lower = catches sooner).
+  // fuel: ticks it burns (60 per second). heat: heat it gives off per tick while burning. flame: chance per tick to throw a flame.
+  // Tallow sitting in a pool only burns near its surface; airborne tallow (air*) flashes.
+  // burnDepth (flammable liquids): how many layers down from the surface can be burning at once while it sits in a pool.
+  DEF[WOOD].fire   = { ign: 7,  fuel: [900, 1500], heat: 3.2, flame: 0.09 };
+  DEF[FLESH].fire  = { ign: 5,  fuel: [300, 520],  heat: 3.4, flame: 0.07 };
+  DEF[TALLOW].fire = { ign: 3,  fuel: [100, 165], burnDepth: 3,  heat: 3.4, flame: 0.12, airIgn: 1.2, airBurn: 20 };
+  DEF[EMBER].fire  = { ign: 0,  fuel: [120, 320],  heat: 1.4, flame: 0.025 };
+
+  // Stains: pen = how far an impact drives the stain into a surface (times impact speed),
+  // p = chance per contact tick to mark a surface, ticks = how long it lasts (60 per second),
+  // a = how dark it gets, fresh -> aged colour over the first `ageBy` of its life, fades out over the last `fadeBy`.
+  DEF[BLOOD].stain  = { pen: 1.0, p: 0.10, ticks: 21600, a: 0.85, fresh: '#6e0d12', aged: '#3f2617', ageBy: 0.30, fadeBy: 0.25 };
+  DEF[ICHOR].stain  = { pen: 0.6, p: 0.06, ticks: 7200,  a: 0.70, fresh: '#6f9a1e', aged: '#46521d', ageBy: 0.50, fadeBy: 0.40, glow: true };
+  DEF[TALLOW].stain = { pen: 0.7, p: 0.05, ticks: 10800, a: 0.45, fresh: '#cdb87e', aged: '#7a683e', ageBy: 0.60, fadeBy: 0.30 };
+  DEF[HOLY].stain   = { pen: 1.0, p: 0.04, ticks: 900,   a: 0.40, fresh: '#14202c', aged: '#1a1f26', ageBy: 1.00, fadeBy: 0.70, cleans: true };
+
+  // Miscible pairs: chance per tick that touching cells trade concentration. Pairs not listed never blend.
+  const MIX_PAIRS = [
+    [BLOOD, HOLY, 0.16],   // blood thins into holy water
+    [BLOOD, ICHOR, 0.04],  // ichor slowly taints blood
+  ];
+
+  const T = DEF.length;
+  const MIXR = new Float32Array(T * T);
+  MIX_PAIRS.forEach(([a, b, r]) => { MIXR[a * T + b] = r; MIXR[b * T + a] = r; });
+  const KIND = new Uint8Array(T), DENS = new Float32Array(T),
+        IGN = new Float32Array(T), FUEL0 = new Uint16Array(T), FUEL1 = new Uint16Array(T),
+        BHEAT = new Float32Array(T), FLAMEP = new Float32Array(T), FUELED = new Uint8Array(T), BDEPTH = new Uint8Array(T),
+        DISP = new Uint8Array(T), VISC = new Float32Array(T), MOVABLE = new Uint8Array(T),
+        SPL = new Float32Array(T), DAMP = new Float32Array(T);
+  for (let t = 0; t < T; t++) {
+    const d = DEF[t]; if (!d) continue;
+    KIND[t] = d.kind; DENS[t] = d.dens;
+    if (d.fire) { BDEPTH[t] = d.fire.burnDepth || 1; FUELED[t] = 1; IGN[t] = d.fire.ign; FUEL0[t] = d.fire.fuel[0]; FUEL1[t] = d.fire.fuel[1]; BHEAT[t] = d.fire.heat; FLAMEP[t] = d.fire.flame; }
+    DISP[t] = d.disp || 0; VISC[t] = d.visc || 0; SPL[t] = d.spl || 0; DAMP[t] = d.damp || 0.9;
+    MOVABLE[t] = (d.kind !== K_STATIC && d.kind !== K_SPOUT) ? 1 : 0;
+  }
+
+  const hex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const pack = (r, g, b) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+  const PAL = new Uint32Array(T * 4);
+  for (let t = 0; t < T; t++) {
+    const d = DEF[t]; if (!d || !d.c) continue;
+    for (let s = 0; s < 4; s++) { const c = hex(d.c[s % d.c.length]); PAL[t*4+s] = pack(c[0], c[1], c[2]); }
+  }
+  const PAL_RGB = new Uint8Array(T * 12);
+  for (let t = 0; t < T; t++) {
+    const d = DEF[t]; if (!d || !d.c) continue;
+    for (let s = 0; s < 4; s++) { const c = hex(d.c[s % d.c.length]); PAL_RGB.set(c, t * 12 + s * 3); }
+  }
+  // stain lookup: per liquid, 64 age steps -> r,g,b,alpha(0..255)
+  const STAIN_P = new Float32Array(T), STAIN_TICKS = new Uint16Array(T), STAIN_LUT = new Uint8Array(T * 64 * 4);
+  const STAIN_GLOW = new Uint8Array(T);
+  for (let t = 0; t < T; t++) {
+    const s = DEF[t] && DEF[t].stain; if (!s) continue;
+    STAIN_P[t] = s.p; STAIN_TICKS[t] = s.ticks; STAIN_GLOW[t] = s.glow ? 1 : 0;
+    const f0 = hex(s.fresh), f1 = hex(s.aged);
+    for (let k = 0; k < 64; k++) {
+      const age = k / 63;                                   // 0 fresh .. 1 gone
+      const m = Math.min(1, age / s.ageBy);
+      const a = s.a * (age < 1 - s.fadeBy ? 1 : Math.max(0, (1 - age) / s.fadeBy));
+      const o = (t * 64 + k) * 4;
+      STAIN_LUT[o]     = f0[0] + (f1[0] - f0[0]) * m;
+      STAIN_LUT[o + 1] = f0[1] + (f1[1] - f0[1]) * m;
+      STAIN_LUT[o + 2] = f0[2] + (f1[2] - f0[2]) * m;
+      STAIN_LUT[o + 3] = a * 255;
+    }
+  }
+  const FIRE_PAL =['#fff1b8','#ffd166','#f4a03a','#e0602a','#a8331f','#5a1d14'].map(h => { const c = hex(h); return pack(c[0], c[1], c[2]); });
+  const GAS_RGB = []; [SMOKE, STEAM, MIASMA].forEach(t => GAS_RGB[t] = hex(DEF[t].c[0]));
+
+  const type = new Uint8Array(N), shade = new Uint8Array(N), aux = new Uint8Array(N);
+  const life = new Int16Array(N), stamp = new Uint16Array(N);
+  const vy = new Int8Array(N), vx = new Int8Array(N); // fall speed, flow direction
+  const stT = new Uint8Array(N), stL = new Uint16Array(N); // stain: which liquid, ticks remaining
+  const stI = new Uint8Array(N);                            // stain strength 0..255 (how soaked the cell is)
+  const mxT = new Uint8Array(N), mxA = new Uint8Array(N);  // liquid mix: the other liquid, its share 0..255
+  const fvx = new Float32Array(N), fvy = new Float32Array(N); // liquid velocity, cells per tick
+  const plg = new Uint8Array(N); // liquid plunge: 255 = falling through air, else slips left inside a pool
+  const burn = new Uint16Array(N);                          // fuel left while a cell is burning (0 = not burning); moves with the cell
+  const heat = new Float32Array(N), heat2 = new Float32Array(N); // heat field: belongs to the place, not the cell
+  const MAXV = 7, G_LIQ = 0.32;
+  let frame = 1;
+
+  // airborne droplets: live outside the grid until they land
+  const MAXP = 6000;
+  const Px = new Float32Array(MAXP), Py = new Float32Array(MAXP), Pvx = new Float32Array(MAXP),
+        Pvy = new Float32Array(MAXP), Pt = new Uint8Array(MAXP), Ps = new Uint8Array(MAXP),
+        Pmt = new Uint8Array(MAXP), Pma = new Uint8Array(MAXP);
+  let pc = 0;
+
+  // xorshift
+  let seed = 0x9e3779b9 ^ (Date.now() & 0xffffffff);
+  function rnd() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; }
+
+  function set(i, t) {
+    type[i] = t; shade[i] = (rnd() * 256) | 0; aux[i] = 0; stamp[i] = frame; vy[i] = 0; vx[i] = 0;
+    fvx[i] = 0; fvy[i] = 0; plg[i] = 0; burn[i] = 0;
+    stT[i] = 0; stL[i] = 0; stI[i] = 0; mxT[i] = 0; mxA[i] = 0;
+    const d = DEF[t];
+    life[i] = (d && d.life) ? d.life[0] + ((rnd() * (d.life[1] - d.life[0])) | 0) : 0;
+  }
+  // a flame: a short-lived tongue of fire that rises and heats the air around it
+  function setFlame(i, lo, hi) {
+    set(i, FIRE);
+    life[i] = lo + ((rnd() * (hi - lo)) | 0);
+  }
+  function swap(i, j) {
+    let a = type[i]; type[i] = type[j]; type[j] = a;
+    a = shade[i]; shade[i] = shade[j]; shade[j] = a;
+    a = aux[i]; aux[i] = aux[j]; aux[j] = a;
+    a = life[i]; life[i] = life[j]; life[j] = a;
+    a = vy[i]; vy[i] = vy[j]; vy[j] = a;
+    a = vx[i]; vx[i] = vx[j]; vx[j] = a;
+    a = stT[i]; stT[i] = stT[j]; stT[j] = a;
+    a = stL[i]; stL[i] = stL[j]; stL[j] = a;
+    a = stI[i]; stI[i] = stI[j]; stI[j] = a;
+    a = fvx[i]; fvx[i] = fvx[j]; fvx[j] = a;
+    a = fvy[i]; fvy[i] = fvy[j]; fvy[j] = a;
+    a = plg[i]; plg[i] = plg[j]; plg[j] = a;
+    a = burn[i]; burn[i] = burn[j]; burn[j] = a;
+    a = mxT[i]; mxT[i] = mxT[j]; mxT[j] = a;
+    a = mxA[i]; mxA[i] = mxA[j]; mxA[j] = a;
+    stamp[i] = frame; stamp[j] = frame;
+  }
+
+  // ---------- liquid mixing ----------
+  // share of liquid A in cell i (cells hold at most two liquids)
+  function shareOf(i, A) { return type[i] === A ? 1 - mxA[i] / 255 : (mxT[i] === A ? mxA[i] / 255 : 0); }
+  function setShare(i, A, B, f) {
+    if (f >= 0.5) { type[i] = A; mxA[i] = Math.round((1 - f) * 255); mxT[i] = mxA[i] ? B : 0; }
+    else          { type[i] = B; mxA[i] = Math.round(f * 255);       mxT[i] = mxA[i] ? A : 0; }
+  }
+  function mixCells(i, j) {
+    const A = type[i];
+    let B = 0;
+    const c1 = mxT[i], c2 = type[j], c3 = mxT[j];
+    for (const c of [c1, c2, c3]) {
+      if (!c || c === A) continue;
+      if (!B) B = c; else if (c !== B) return;       // three liquids: leave alone
+    }
+    if (!B) return;
+    const r = MIXR[A * T + B];
+    if (!r || rnd() > r) return;
+    const fi = shareOf(i, A), fj = shareOf(j, A), diff = fj - fi;
+    if (diff < 0.01 && diff > -0.01) return;
+    const k = 0.25 + rnd() * 0.25;
+    setShare(i, A, B, fi + diff * k);
+    setShare(j, A, B, fj - diff * k);
+  }
+
+  // ---------- stains ----------
+  function stainable(t) { const k = KIND[t]; return k === K_STATIC || k === K_POWDER; }
+  // How readily a surface soaks a stain in: porous ground drinks it deep, stone and bone keep it on the surface.
+  const SOAK = new Float32Array(T);
+  SOAK[STONE] = 0.3; SOAK[BONE] = 0.4; SOAK[WOOD] = 0.75; SOAK[EMBER] = 0.5;
+  SOAK[DIRT] = 1.1; SOAK[MUD] = 0.9; SOAK[ASH] = 1.3; SOAK[FLESH] = 1.0;
+
+  // mark cell j with liquid t at strength s (0..255); returns false if it isn't a surface that takes stains
+  function putStain(j, t, s) {
+    if (!stainable(type[j])) return false;
+    if (DEF[t].stain.cleans && stT[j] && stT[j] !== t) {           // holy water scrubs other stains away
+      stI[j] = stI[j] > 70 ? stI[j] - 70 : 0;
+      if (!stI[j]) { stT[j] = 0; stL[j] = 0; }
+      return true;
+    }
+    if (stT[j] && stT[j] !== t && s < stI[j]) return true;         // a weaker stain doesn't cover a stronger one
+    const same = stT[j] === t;
+    stT[j] = t; stL[j] = STAIN_TICKS[t];
+    stI[j] = Math.min(255, same ? Math.max(stI[j], s) : s);
+    return true;
+  }
+  // liquid t sitting against surface cell j slowly soaks in
+  function stainAt(j, t, boost) {
+    if (!stainable(type[j])) return;
+    if (rnd() > STAIN_P[t] * (boost || 1)) return;
+    const prev = stT[j] === t ? stI[j] : 0;
+    putStain(j, t, Math.min(255, Math.max(110, prev + 22)));
+  }
+  // Liquid t hits surface cell `hit` moving along (dx, dy) at `speed` cells/tick: the stain is driven into the
+  // material along the line of travel (deeper for faster hits and softer materials, fading with depth),
+  // and a hard hit sprays smaller marks over the surface around it, leaning the way the liquid was moving.
+  function splatter(hit, t, dx, dy, speed) {
+    const sd = DEF[t].stain;
+    if (!sd || !stainable(type[hit])) return;
+    const len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+    const s0 = Math.min(255, 120 + speed * 22);
+    const reachDepth = speed * sd.pen;                             // in 'soak' units
+    let fx = (hit % W) + 0.5, fy = ((hit / W) | 0) + 0.5, budget = Math.max(1, reachDepth), last = -1, k = 0;
+    while (budget > 0 && k < 14) {
+      const cx = Math.floor(fx), cy = Math.floor(fy);
+      if (cx < 0 || cx >= W || cy < 0 || cy >= H) break;
+      const q = cy * W + cx;
+      if (q !== last) {
+        if (!putStain(q, t, s0 * Math.max(0.3, 1 - k / (reachDepth + 1.5)))) break;
+        budget -= 1 / Math.max(0.15, SOAK[type[q]]);               // hard materials use the push up fast
+        last = q; k++;
+      }
+      fx += ux * 0.6 + (rnd() - 0.5) * (0.35 + k * 0.12);         // wanders more the deeper it soaks
+      fy += uy * 0.6 + (rnd() - 0.5) * 0.35;
+      // soft materials wick the stain sideways a little as it goes down
+      if (q === last && k > 1 && rnd() < SOAK[type[q]] * 0.35) {
+        const side = q + (rnd() < 0.5 ? -1 : 1);
+        if (side >= 0 && side < N) putStain(side, t, s0 * 0.45 * Math.max(0.3, 1 - k / (reachDepth + 1.5)));
+      }
+    }
+    if (speed < 2) return;
+    // the spray: marks scattered across nearby surface, biased in the direction of travel
+    const hx = hit % W, hy = (hit / W) | 0;
+    const drops = Math.round(speed * 1.8 * (SPL[t] + 0.2));
+    const reach = 1.5 + speed * 1.1 * (SPL[t] + 0.1);
+    for (let n = 0; n < drops; n++) {
+      const r = rnd() * reach;
+      const ox = Math.round((rnd() * 2 - 1) * r + ux * r * 0.7);
+      const cx = hx + ox; if (cx < 0 || cx >= W) continue;
+      // find the surface in that column near the impact height
+      for (let cy = Math.max(0, hy - 3); cy <= Math.min(H - 1, hy + 3); cy++) {
+        const q = cy * W + cx;
+        if (stainable(type[q]) && cy > 0 && isOpen(q - W)) {
+          const fall = 1 - r / reach;
+          putStain(q, t, s0 * (0.35 + 0.45 * fall));
+          if (rnd() < fall * SOAK[type[q]] && q + W < N) putStain(q + W, t, s0 * 0.3 * fall);
+          break;
+        }
+      }
+    }
+  }
+  function decayStains(by) {
+    for (let i = 0; i < N; i++) {
+      if (!stL[i]) continue;
+      if (stL[i] <= by) { stL[i] = 0; stT[i] = 0; stI[i] = 0; } else stL[i] -= by;
+    }
+  }
+
+  // ---------- splashes ----------
+  function launch(i, svx, svy) {
+    if (pc >= MAXP) return false;
+    Px[pc] = (i % W) + 0.5; Py[pc] = ((i / W) | 0) + 0.5;
+    Pvx[pc] = svx; Pvy[pc] = svy; Pt[pc] = type[i]; Ps[pc] = shade[i];
+    Pmt[pc] = mxT[i]; Pma[pc] = mxA[i]; pc++;
+    mxT[i] = 0; mxA[i] = 0;
+    type[i] = EMPTY; vy[i] = 0; vx[i] = 0; aux[i] = 0; life[i] = 0; fvx[i] = 0; fvy[i] = 0;
+    return true;
+  }
+  function isOpen(j) { const k = KIND[type[j]]; return k === K_EMPTY || k === K_GAS || k === K_FIRE; }
+  // a blow of strength v breaks the surface at liquid cell b: surface cells beside it are thrown up and out
+  function crown(b, x, v) {
+    const s = SPL[type[b]];
+    if (!s || v < 3.5) return;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let r = 1; r <= 2; r++) {
+        const nx = x + side * r; if (nx < 0 || nx >= W) break;
+        const j = b + side * r;
+        if (KIND[type[j]] !== K_LIQUID || j < W || !isOpen(j - W)) break;
+        if (rnd() < 0.4 * s / r)
+          launch(j, side * v * (0.12 + rnd() * 0.22) * s, -v * (0.28 + rnd() * 0.32) * s);
+      }
+    }
+  }
+  function stepParticles() {
+    for (let p = 0; p < pc;) {
+      let svx = Pvx[p], svy = Pvy[p] + 0.32;
+      if (svy > MAXV) svy = MAXV;
+      svx *= 0.985;
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(svx), Math.abs(svy))));
+      const sx = svx / steps, sy = svy / steps;
+      let x = Px[p], y = Py[p], landed = false, hitCell = -1, lastOpen = -1;
+      for (let s = 0; s < steps; s++) {
+        const nx = x + sx, ny = y + sy;
+        const cx = Math.floor(nx), cy = Math.floor(ny);
+        if (cx < 0 || cx >= W) { svx = -svx * 0.4; break; }
+        if (cy < 0) { svy = 0; break; }
+        if (cy >= H) { landed = true; break; }
+        const q = cy * W + cx, tt = type[q];
+        // droplets pass through liquid that is itself still falling; they land on anything at rest
+        if (tt !== EMPTY && KIND[tt] !== K_GAS && KIND[tt] !== K_FIRE &&
+            !(KIND[tt] === K_LIQUID && fvy[q] >= 0.5 && plg[q] >= 254)) { landed = true; hitCell = q; break; }
+        x = nx; y = ny;
+        if (isOpen(q)) lastOpen = q;
+        if (Pt[p] === TALLOW && heat[q] > DEF[TALLOW].fire.airIgn && isOpen(q)) {   // a droplet of fat in hot air goes up all at once
+          setFlame(q, 8, 18); heat[q] += 14; landed = true; hitCell = -2; break;
+        }
+      }
+      Px[p] = x; Py[p] = y; Pvx[p] = svx; Pvy[p] = svy;
+      if (landed && hitCell === -2) {                         // burned up in the air
+        pc--;
+        Px[p] = Px[pc]; Py[p] = Py[pc]; Pvx[p] = Pvx[pc]; Pvy[p] = Pvy[pc]; Pt[p] = Pt[pc]; Ps[p] = Ps[pc];
+        Pmt[p] = Pmt[pc]; Pma[p] = Pma[pc];
+        continue;
+      }
+      if (landed) {
+        if (hitCell >= 0 && STAIN_P[Pt[p]]) splatter(hitCell, Pt[p], svx, svy, Math.hypot(svx, svy));   // spatter
+        // land where it is, or in the nearest open cell around it (rings outward; never climbing up a column)
+        const x0 = Math.min(W - 1, Math.max(0, Math.floor(x))), y0 = Math.min(H - 1, Math.floor(y));
+        let j = isOpen(y0 * W + x0) ? y0 * W + x0 : -1;
+        for (let r = 1; r <= 12 && j < 0; r++) {
+          const flip = rnd() < 0.5 ? 1 : -1;
+          for (let dy = -r; dy <= r && j < 0; dy++) {
+            const span = r - Math.abs(dy);                  // diamond ring: |dx| + |dy| = r
+            for (let s2 = 0; s2 < 2 && j < 0; s2++) {
+              const dx = (s2 ? -span : span) * flip;
+              if (s2 && span === 0) break;
+              const cx = x0 + dx, cy = y0 + dy;
+              if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+              const q = cy * W + cx;
+              if (isOpen(q)) j = q;
+            }
+          }
+        }
+        if (j < 0 && lastOpen >= 0 && isOpen(lastOpen)) j = lastOpen;   // back where it last had room
+        if (j < 0) {                                                       // last resort: first open cell above
+          for (let cy = y0; cy >= 0; cy--) { const q = cy * W + x0; if (isOpen(q)) { j = q; break; } if (!MOVABLE[type[q]]) break; }
+        }
+        if (j >= 0) {
+          set(j, Pt[p]); shade[j] = Ps[p]; mxT[j] = Pmt[p]; mxA[j] = Pma[p];
+          if (Pt[p] === EMBER) burn[j] = 150 + ((rnd() * 250) | 0);
+          fvx[j] = svx; fvy[j] = svy; plg[j] = 254;        // a splash droplet: lands carrying its speed, but throws no new crown
+          vx[j] = svx > 0.2 ? 1 : svx < -0.2 ? -1 : 0;
+        }
+        pc--;
+        Px[p] = Px[pc]; Py[p] = Py[pc]; Pvx[p] = Pvx[pc]; Pvy[p] = Pvy[pc]; Pt[p] = Pt[pc]; Ps[p] = Ps[pc];
+        Pmt[p] = Pmt[pc]; Pma[p] = Pma[pc];
+        continue;
+      }
+      p++;
+    }
+  }
+  function randNeighbor(i, x, y) {
+    const dx = ((rnd() * 3) | 0) - 1, dy = ((rnd() * 3) | 0) - 1;
+    if (!dx && !dy) return -1;
+    const nx = x + dx, ny = y + dy;
+    if (nx < 0 || nx >= W || ny < 0 || ny >= H) return -1;
+    return i + dy * W + dx;
+  }
+  function hasAir(i) {
+    const x = i % W;
+    return (i >= W && isOpen(i - W)) || (i < N - W && isOpen(i + W)) || (x > 0 && isOpen(i - 1)) || (x < W - 1 && isOpen(i + 1));
+  }
+  // can this cell get the air it needs to burn? Solids and powders need to touch open air;
+  // a flammable liquid can burn up to burnDepth layers below the surface of its pool
+  function airReach(i, t) {
+    if (hasAir(i)) return true;
+    const depth = BDEPTH[t];
+    if (depth <= 1 || KIND[t] !== K_LIQUID) return false;
+    // layer n has open air n cells straight above it, through nothing but the same liquid
+    for (let k = i - W, n = 1; k >= 0 && n <= depth; k -= W, n++) {
+      if (isOpen(k)) return true;
+      if (type[k] !== t) return false;
+    }
+    return false;
+  }
+  function startBurn(j) {
+    const t = type[j];
+    if (!FUELED[t] || burn[j]) return;
+    burn[j] = FUEL0[t] + ((rnd() * (FUEL1[t] - FUEL0[t])) | 0);
+  }
+  // tallow off the ground (falling, pouring, a droplet that just landed) burns all at once
+  function airborne(i, t) {
+    return t === TALLOW && (fvy[i] >= 0.5 || (i < N - W && isOpen(i + W)));
+  }
+
+  // ---------- update rules ----------
+  function canEnter(d, j) { const tt = type[j]; return MOVABLE[tt] && DENS[tt] < d; }
+
+  // Accelerating fall. Sets fallTo (where the cell ended up) and impact (speed it hit something at, 0 if still falling).
+  let fallTo = 0, impact = 0;
+  function fall(i, x, t) {
+    const d = DENS[t], liquid = KIND[t] === K_LIQUID;
+    let v = vy[i] + 1; if (v > MAXV) v = MAXV;
+    const steps = v;
+    let m = v;                 // momentum left; liquids it plunges through eat it away
+    // already submerged (liquid above us)? then there's no surface left to splash
+    let cur = i, n = 0, hit = false, entered = i >= W && KIND[type[i - W]] === K_LIQUID;
+    while (n < steps) {
+      const b = cur + W;
+      if (b >= N) { hit = true; break; }
+      const tt = type[b];
+      if (!MOVABLE[tt]) { hit = true; break; }
+
+      if (KIND[tt] === K_LIQUID) {
+        if (!liquid && m < 2 && rnd() < 0.45) break;                      // powders sink slowly once slowed
+        if (!entered) {
+          entered = true;
+          if (m >= 3) crown(b, x, m);                                     // breaking the surface throws liquid up
+        }
+        // the liquid we plough into gets shoved aside (it swaps up behind us)
+        fvx[b] += (rnd() < 0.5 ? -1 : 1) * m * (0.2 + rnd() * 0.3); fvy[b] -= m * 0.1;
+        const tb = type[b];
+        if (tb !== EMPTY && !(MOVABLE[tb] && KIND[tb] !== K_STATIC)) { hit = true; break; }
+        swap(cur, b); cur = b; n++;
+        // drag: thicker and denser liquids stop a plunge sooner; powders plough through less
+        let drag = 0.8 + VISC[tt] * 5;
+        if (DENS[tt] > d) drag += (DENS[tt] - d) * 8;
+        if (!liquid) drag += 0.6;
+        m -= drag;
+        if (m <= 0) { m = 0; break; }
+        continue;
+      }
+
+      if (DENS[tt] >= d) {
+        if (vy[b] > 0) { m = Math.min(m, vy[b]); break; }
+        hit = true; break;
+      }
+      swap(cur, b); cur = b; n++;
+    }
+    fallTo = cur; impact = hit ? Math.round(m) : 0;
+    vy[cur] = hit ? 0 : Math.max(0, Math.min(MAXV, Math.floor(m)));
+    return n;
+  }
+
+  function updPowder(i, x, y, t) {
+    const n = fall(i, x, t);
+    if (n > 0 || fallTo >= N - W) return;
+    const d = DENS[t], b = i + W;
+    if (t === FLESH && rnd() > 0.12) return;        // flesh slumps, barely slides
+    if (t === MUD && rnd() > 0.35) return;          // mud is sluggish
+    const s = rnd() < 0.5 ? -1 : 1;
+    for (let k = 0; k < 2; k++) {
+      const dx = k ? -s : s, nx = x + dx;
+      if (nx < 0 || nx >= W) continue;
+      if (canEnter(d, b + dx) && canEnter(d, i + dx)) { swap(i, b + dx); return; }
+    }
+  }
+
+  function updLiquid(i, x, y, t) {
+    {
+      const nj = randNeighbor(i, x, y);
+      if (nj >= 0) {
+        if (KIND[type[nj]] === K_LIQUID) mixCells(i, nj);
+        else if (STAIN_P[t]) stainAt(nj, t);
+      }
+      t = type[i];   // mixing can flip which liquid dominates this cell
+    }
+    // reactions
+    if (t === BLOOD || t === ICHOR) {
+      const j = randNeighbor(i, x, y);
+      if (j >= 0) {
+        const tt = type[j];
+        if (t === BLOOD && tt === DIRT && rnd() < 0.005) { set(j, MUD); set(i, EMPTY); return; }
+        if (t === ICHOR) {
+          if (tt === FLESH && rnd() < 0.02) { set(j, MIASMA); if (rnd() < 0.15) { set(i, EMPTY); return; } }
+          else if (tt === HOLY && rnd() < 0.3) { set(j, STEAM); set(i, STEAM); return; }
+        }
+      }
+    }
+    const d = DENS[t];
+
+    // ---------- 1. falling (accelerates; plunges into resting pools when it arrives fast) ----------
+    if (y < H - 1) {
+      let v = fvy[i] + G_LIQ;
+      if (v < 1) v = 1;
+      if (v > MAXV) v = MAXV;
+      const steps = Math.floor(v);
+      let cur = i, cx = x, moved = 0, landed = false, waiting = false, spray = false;
+      for (let s = 0; s < steps; s++) {
+        const b = cur + W;
+        if (b >= N) { landed = true; break; }
+        const tb = type[b];
+        if (isOpen(b)) { swap(cur, b); cur = b; moved++; if (plg[cur] < 254) plg[cur] = 255; continue; }   // free fall
+        if (KIND[tb] === K_LIQUID) {
+          if (fvy[b] >= 0.5) {
+            // it's only really falling if it moved this tick (rows below update first); otherwise its speed is stale
+            // wait only behind liquid that is still in the air; one already plunging into the pool is just pool to us
+            if (stamp[b] === frame && plg[b] >= 254) { if (v > fvy[b] + 1) v = fvy[b] + 1; waiting = true; break; }
+            if (plg[b] === 0 || plg[b] >= 254) fvy[b] = 0;
+          }
+          // arriving from the air fast enough: break the surface, then drive down through the pool
+          if (plg[cur] >= 254) {
+            const fromSplash = plg[cur] === 254;
+            spray = !fromSplash;
+            plg[cur] = 0;
+            if (v >= 2) {
+              if (!fromSplash) crown(b, cx, v);   // only fresh falls throw a crown, so splashes die out instead of feeding themselves
+              plg[cur] = Math.min(250, Math.round(v * (fromSplash ? 1.2 : 2.6) * (1 - VISC[tb]) * Math.min(1.4, d / DENS[tb])));
+            }
+          }
+          if (plg[cur] > 0 && plg[cur] < 254) {
+            plg[cur]--;
+            plungeThrough(cur, b, cx, v, spray);
+            cur = b; moved++;
+            v *= 1 - Math.min(0.5, 0.04 + VISC[tb] * 0.6);
+            if (v < 1) { v = 0; plg[cur] = 0; break; }
+            continue;
+          }
+          if (DENS[tb] < d) { swap(cur, b); cur = b; moved++; v = 1; break; }       // heavier sinks through lighter
+          landed = true; break;
+        }
+        landed = true; break;                                                       // solid or powder
+      }
+      if (landed) {
+        const hit = v, wasDrop = plg[cur] === 254;
+        if (hit >= 1.5 && STAIN_P[t] && cur + W < N) splatter(cur + W, t, fvx[cur] * 0.3, hit, hit);
+        fvy[cur] = 0; plg[cur] = 0;
+        // a hard landing on something solid splats sideways, sometimes throwing a droplet
+        if (hit >= 3 && !wasDrop && cur >= W && isOpen(cur - W) && cur + W < N && KIND[type[cur + W]] !== K_LIQUID) {
+          const s = SPL[t];
+          if (rnd() < s * 0.3) { launch(cur, (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 1.4) * s, -hit * (0.12 + rnd() * 0.15) * s); return; }
+          fvx[cur] = (rnd() < 0.5 ? -1 : 1) * hit * 0.6;                            // extra spread on the next flow
+        }
+        if (moved) return;
+      } else if (moved || waiting) {
+        fvy[cur] = v;
+        return;
+      } else {
+        fvy[i] = 0;
+      }
+    }
+
+    // ---------- 2. resting: Noita-style flow — every cell, every tick ----------
+    if (VISC[t] && rnd() < VISC[t]) return;                 // thick liquids spread sluggishly
+    // slip diagonally down (into open air, or through a lighter liquid)
+    if (y < H - 1) {
+      const b = i + W, s = vx[i] || (rnd() < 0.5 ? -1 : 1);
+      for (let k = 0; k < 2; k++) {
+        const dx = k ? -s : s, nx = x + dx;
+        if (nx < 0 || nx >= W) continue;
+        if (canEnter(d, b + dx) && canEnter(d, i + dx)) { swap(i, b + dx); vx[b + dx] = dx; return; }
+      }
+    }
+    // spread sideways; a fresh splat or landing droplet carries extra reach
+    let boost = 0;
+    if (fvx[i]) { boost = Math.round(Math.abs(fvx[i])); if (!vx[i]) vx[i] = fvx[i] > 0 ? 1 : -1; fvx[i] = 0; }
+    let dir = vx[i] || (rnd() < 0.5 ? -1 : 1);
+    if (rnd() < 0.02) dir = -dir;
+    const dist = DISP[t] + boost;
+    if (flow(i, x, dir, dist, d) < 0) {
+      dir = -dir;
+      if (flow(i, x, dir, dist, d) < 0) vx[i] = dir;
+    }
+  }
+
+  // A plunging cell at `cur` drives into liquid cell `b` below it. The liquid it displaces gets shoved
+  // out of the way: thrown up out of the surface if it's near the top, otherwise pushed aside or up behind.
+  function plungeThrough(cur, b, x, v, spray) {
+    const s = SPL[type[b]];
+    const nearTop = cur >= W && isOpen(cur - W);
+    if (spray && nearTop && rnd() < 0.55 * s) {
+      // displaced liquid sprays up and out of the hole
+      const side = rnd() < 0.5 ? -1 : 1;
+      if (launch(b, side * (0.4 + rnd() * 1.2) * v * 0.25, -v * (0.25 + rnd() * 0.3) * s)) { swap(cur, b); return; }
+    }
+    // shove it sideways if there's room beside it
+    const side = rnd() < 0.5 ? -1 : 1, bx = x;
+    for (let k = 0; k < 2; k++) {
+      const dx = k ? -side : side, nx = bx + dx;
+      if (nx < 0 || nx >= W) continue;
+      const q = b + dx;
+      if (isOpen(q)) { swap(b, q); vx[q] = dx; fvx[q] = dx * v * 0.5; swap(cur, b); return; }
+    }
+    // breaking the surface: what it pushes out spills onto the surface beside the hole, never stacking
+    // up in the hole itself (otherwise a steady stream builds a column above the pool)
+    if (nearTop) {
+      for (let r = 1; r <= 4; r++) {
+        for (let k = 0; k < 2; k++) {
+          const dx = (k ? -side : side) * r, nx = bx + dx;
+          if (nx < 0 || nx >= W) continue;
+          const q = cur + dx;
+          if (isOpen(q)) {
+            swap(b, q); vx[q] = dx > 0 ? 1 : -1; fvx[q] = (dx > 0 ? 1 : -1) * (2 + v * 0.4);
+            swap(cur, b); return;
+          }
+        }
+      }
+    }
+    swap(cur, b);
+    vx[cur] = side; fvx[cur] = side * v * 0.4;     // the displaced cell (now above us) carries a sideways push
+  }
+
+  // Move cell i up to `dist` cells sideways through open space. Stops at the first lighter liquid
+  // (displacing it) and at a ledge (so it pours over). Returns the new index, or -1 if it couldn't move.
+  function flow(i, x, dir, dist, d) {
+    let last = -1;
+    for (let k = 1; k <= dist; k++) {
+      const nx = x + dir * k; if (nx < 0 || nx >= W) break;
+      const j = i + dir * k, tt = type[j];
+      if (!MOVABLE[tt] || DENS[tt] >= d) break;
+      last = j;
+      if (KIND[tt] === K_LIQUID) break;
+      if (j + W < N && canEnter(d, j + W)) break;
+    }
+    if (last < 0) return -1;
+    swap(i, last); vx[last] = dir;
+    return last;
+  }
+
+  function updGas(i, x, y, t) {
+    if (--life[i] <= 0) { set(i, (t === STEAM && rnd() < 0.2) ? HOLY : EMPTY); return; }
+    if (rnd() > DEF[t].rise) return;
+    const d = DENS[t], dx = ((rnd() * 3) | 0) - 1, nx = x + dx;
+    if (y > 0 && nx >= 0 && nx < W) {
+      const j = i - W + dx, tt = type[j];
+      if (tt === EMPTY || ((KIND[tt] === K_GAS || KIND[tt] === K_LIQUID) && DENS[tt] > d)) { swap(i, j); return; }
+    }
+    const sx = x + (rnd() < 0.5 ? -1 : 1);
+    if (sx >= 0 && sx < W && type[i - x + sx] === EMPTY) swap(i, i - x + sx);
+  }
+
+  function updFire(i, x, y) {
+    heat[i] += 5;                                         // flames heat the air they're in
+    // doused by liquid
+    const j = randNeighbor(i, x, y);
+    if (j >= 0) {
+      const tt = type[j];
+      if (tt === HOLY) { if (rnd() < 0.3) set(j, STEAM); set(i, STEAM); heat[i] *= 0.5; return; }
+      if (tt === BLOOD || tt === ICHOR) { set(i, SMOKE); heat[i] *= 0.6; return; }
+    }
+    if (--life[i] <= 0) { set(i, rnd() < 0.3 ? SMOKE : EMPTY); return; }
+    // rise and lick about
+    if (y > 0 && rnd() < 0.75) {
+      const dx = ((rnd() * 3) | 0) - 1, nx = x + dx;
+      if (nx >= 0 && nx < W) {
+        const k = i - W + dx, tt = type[k];
+        if (tt === EMPTY || KIND[tt] === K_GAS) swap(i, k);
+      }
+    }
+  }
+
+  // throw a flame into open air next to a burning cell, preferring straight up; hotter fires throw taller flames
+  function emitFlame(i, x, y, big) {
+    const h = heat[i];
+    const opts = [i - W, i - W - 1, i - W + 1, i - 1, i + 1];
+    const start = (rnd() * 3) | 0;
+    for (let n = 0; n < 5; n++) {
+      const k = n < 3 ? opts[(start + n) % 3] : opts[n];
+      const kx = k % W;
+      if (k < 0 || k >= N || Math.abs(kx - x) > 1) continue;
+      if (type[k] === EMPTY || KIND[type[k]] === K_GAS) {
+        const extra = Math.min(26, h * 0.5) + (big ? 10 : 0);
+        setFlame(k, 6 + extra * 0.5, 14 + extra);
+        return;
+      }
+    }
+  }
+
+  // A cell that is burning keeps its material (wood stays wood) while its fuel runs down.
+  // Returns true if the cell turned into something else this tick.
+  function updBurning(i, x, y, t) {
+    // quenched by water or blood touching it
+    for (let n = 0; n < 2; n++) {
+      const j = randNeighbor(i, x, y);
+      if (j < 0) continue;
+      const tt = type[j];
+      // burning fat floats: liquid underneath it doesn't put it out, only liquid splashed over or beside it
+      if (t === TALLOW && j > i + 1) continue;
+      if ((tt === HOLY || tt === BLOOD) && rnd() < 0.35) {
+        burn[i] = 0; heat[i] *= 0.3;
+        if (tt === HOLY && rnd() < 0.4) set(j, STEAM);
+        return false;
+      }
+    }
+    // fire needs air: tallow too deep in its pool goes out, wood/flesh smoulder without burning down
+    if (!airReach(i, t)) {
+      if (t === TALLOW) burn[i] = 0;
+      return false;
+    }
+    const air = airborne(i, t);
+    const rate = air ? DEF[TALLOW].fire.airBurn : 1;
+    // a burning cell heats itself and, directly, everything touching it (more burning neighbours = faster spread)
+    const bh = BHEAT[t] * (air ? 3 : 1);
+    heat[i] += bh;
+    if (y > 0) heat[i - W] += bh * 0.7;
+    if (x > 0) heat[i - 1] += bh * 0.45;
+    if (x < W - 1) heat[i + 1] += bh * 0.45;
+    if (y < H - 1) heat[i + W] += bh * (KIND[t] === K_LIQUID ? 0.9 : 0.3);   // a burning pool heats the fat right under it
+    burn[i] = burn[i] > rate ? burn[i] - rate : 0;
+    if (rnd() < FLAMEP[t] * (air ? 4 : 1) * (1 + heat[i] / 30)) emitFlame(i, x, y, air);
+    if (y > 0 && rnd() < 0.01 && type[i - W] === EMPTY) set(i - W, SMOKE);
+
+    if (t === WOOD) {
+      // pieces break away as it burns: undersides drop off, and anything barely attached falls
+      let attached = 0;
+      if (y > 0 && type[i - W] === WOOD) attached++;
+      if (y < H - 1 && type[i + W] === WOOD) attached++;
+      if (x > 0 && type[i - 1] === WOOD) attached++;
+      if (x < W - 1 && type[i + 1] === WOOD) attached++;
+      const loose = y < H - 1 && isOpen(i + W) && (attached <= 1 ? 0.015 : 0.005);
+      if (loose && rnd() < loose) {
+        type[i] = EMBER; burn[i] = Math.min(burn[i], 120 + ((rnd() * 200) | 0)); stamp[i] = frame;
+        return true;
+      }
+      // and every so often an ember pops out of the fire and arcs away
+      if (y > 0 && rnd() < 0.0025 && type[i - W] === EMPTY) {
+        set(i - W, EMBER);
+        if (!launch(i - W, (rnd() * 2 - 1) * 1.2, -(0.8 + rnd() * 1.6))) set(i - W, EMPTY);
+      }
+    }
+    // burning flesh renders down: fat drips out of it
+    if (t === FLESH && rnd() < 0.004) {
+      for (const k of [i + W, i - 1, i + 1]) {
+        if (k >= 0 && k < N && type[k] === EMPTY && Math.abs((k % W) - x) <= 1) { set(k, TALLOW); break; }
+      }
+    }
+    if (burn[i] === 0) {
+      const r = rnd();
+      if (t === WOOD) {
+        if (r < 0.3) { type[i] = EMBER; burn[i] = 200 + ((rnd() * 280) | 0); stamp[i] = frame; }
+        else set(i, r < 0.6 ? ASH : (r < 0.8 ? SMOKE : EMPTY));
+      } else if (t === FLESH) set(i, r < 0.12 ? ASH : (r < 0.5 ? SMOKE : EMPTY));
+      else if (t === EMBER) set(i, r < 0.6 ? ASH : EMPTY);
+      else set(i, r < 0.35 ? SMOKE : EMPTY);
+      return true;
+    }
+    return false;
+  }
+
+  // ---------- heat ----------
+  // Heat soaks into whatever is there, spreads to neighbours (mostly upward: hot air rises), and cools off.
+  // Air carries heat freely; solids and liquids take it in slowly; water and blood soak it up and cool fast.
+  const COND = new Float32Array(T), COOL = new Float32Array(T), SPREAD = new Float32Array(T);
+  for (let t = 0; t < T; t++) {
+    const k = KIND[t];
+    SPREAD[t] = k === K_STATIC ? 0.12 : k === K_POWDER ? 0.15 : k === K_LIQUID ? 0.2 : 0.4;   // share passed on per tick
+    COND[t] = k === K_STATIC ? 0.35 : k === K_POWDER ? 0.3 : k === K_LIQUID ? 0.25 : k === K_SPOUT ? 0.2 : 1;
+    COOL[t] = k === K_STATIC ? 0.012 : k === K_POWDER ? 0.02 : k === K_LIQUID ? 0.1 : 0.045;
+  }
+  COND[TALLOW] = 0.3; COOL[TALLOW] = 0.03;
+  COND[STONE] = 0.2;
+
+  function airHeat(i) {
+    const x = i % W;
+    let m = 0;
+    if (i >= W && isOpen(i - W) && heat2[i - W] > m) m = heat2[i - W];
+    if (i < N - W && isOpen(i + W) && heat2[i + W] > m) m = heat2[i + W];
+    if (x > 0 && isOpen(i - 1) && heat2[i - 1] > m) m = heat2[i - 1];
+    if (x < W - 1 && isOpen(i + 1) && heat2[i + 1] > m) m = heat2[i + 1];
+    return m;
+  }
+  function heatStep() {
+    heat2.fill(0);
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = row + x, h = heat[i];
+        if (h < 0.02) continue;
+        const out = h * SPREAD[type[i]];
+        heat2[i] += h - out - h * COOL[type[i]];
+        if (y > 0)     heat2[i - W] += out * 0.5 * COND[type[i - W]];
+        if (x > 0)     heat2[i - 1] += out * 0.18 * COND[type[i - 1]];
+        if (x < W - 1) heat2[i + 1] += out * 0.18 * COND[type[i + 1]];
+        if (y < H - 1) heat2[i + W] += out * 0.14 * COND[type[i + W]];
+      }
+    }
+    // swap buffers, then let heat do its work
+    for (let i = 0; i < N; i++) {
+      const h = heat2[i];
+      heat[i] = h;
+      const t = type[i];
+      if (h < 1 && !FUELED[t]) continue;
+      if (FUELED[t]) {
+        if (burn[i] || t === EMBER) continue;
+        const ign = airborne(i, t) ? DEF[TALLOW].fire.airIgn : IGN[t];
+        // a surface catches from the hot air touching it as well as from heat soaked into it
+        const e = Math.max(h, airHeat(i) * 0.8);
+        if (e > ign && airReach(i, t) && rnd() < Math.min(0.25, (e - ign) / ign * 0.08)) startBurn(i);
+      } else if (t === MIASMA) {
+        if (h > 1.5) { setFlame(i, 5, 12); heat[i] += 22; }        // gas flashes; the burst sets off its neighbours
+      } else if (t === ICHOR) {
+        if (h > 12 && rnd() < 0.02) set(i, MIASMA);                 // boils off into miasma
+      } else if (t === HOLY) {
+        if (h > 22 && rnd() < 0.05) { set(i, STEAM); heat[i] -= 8; }
+      }
+    }
+  }
+
+  function updSpout(i, x, y) {
+    if (rnd() * 1000 > life[i]) return;
+    const m = aux[i];
+    const j = m === FIRE ? i - W : i + W;
+    if (j < 0 || j >= N) return;
+    const tt = type[j];
+    if (tt === EMPTY || KIND[tt] === K_GAS) {
+      if (m === FIRE) setFlame(j, 16, 30); else set(j, m);
+    }
+  }
+
+  function step() {
+    frame = frame >= 65535 ? 1 : frame + 1;
+    const ltr = frame & 1;
+    for (let y = H - 1; y >= 0; y--) {
+      const row = y * W;
+      for (let k = 0; k < W; k++) {
+        const x = ltr ? k : W - 1 - k, i = row + x, t = type[i];
+        if (t === EMPTY || stamp[i] === frame) continue;
+        if (burn[i] && updBurning(i, x, y, t)) continue;
+        switch (KIND[t]) {
+          case K_POWDER: updPowder(i, x, y, t); break;
+          case K_LIQUID: updLiquid(i, x, y, t); break;
+          case K_GAS:    updGas(i, x, y, t); break;
+          case K_FIRE:   updFire(i, x, y); break;
+          case K_SPOUT:  updSpout(i, x, y); break;
+        }
+      }
+    }
+    stepParticles();
+    heatStep();
+    if (frame % 8 === 0) decayStains(8);
+  }
+
+  // ---------- backdrop (crypt masonry behind empty cells) ----------
+  const BG = new Uint32Array(N);
+  const BGR = new Uint8Array(N * 3);
+  for (let y = 0; y < H; y++) {
+    const course = (y / 7) | 0, off = (course & 1) ? 7 : 0;
+    const depth = 0.55 + 0.45 * (y / H);
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const mortar = (y % 7 === 0) || ((x + off) % 14 === 0);
+      const n = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+      let v = mortar ? 9 : 17 + Math.abs(n) * 5 + ((course * 7 + ((x + off) / 14 | 0) * 3) % 4);
+      v *= depth;
+      const r = v + 2, g = v - 1, b = v + 4;
+      BGR[i*3] = r; BGR[i*3+1] = g; BGR[i*3+2] = b;
+      BG[i] = pack(r | 0, Math.max(0, g) | 0, b | 0);
+    }
+  }
+
+  // ---------- scene ----------
+  function clearAll() { type.fill(0); aux.fill(0); life.fill(0); shade.fill(0); vy.fill(0); vx.fill(0); fvx.fill(0); fvy.fill(0); plg.fill(0); burn.fill(0); heat.fill(0); stT.fill(0); stL.fill(0); stI.fill(0); mxT.fill(0); mxA.fill(0); pc = 0; }
+  function put(x, y, t) { if (x >= 0 && x < W && y >= 0 && y < H) set(y * W + x, t); }
+  function rect(x0, y0, x1, y1, t, p) {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (p === undefined || rnd() < p) put(x, y, t);
+  }
+  function line(x0, y0, x1, y1, t, w) {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+    for (let s = 0; s <= n; s++) {
+      const x = Math.round(x0 + (x1 - x0) * s / n), y = Math.round(y0 + (y1 - y0) * s / n);
+      rect(x, y, x + (w || 1) - 1, y + (w || 1) - 1, t);
+    }
+  }
+  function spout(x, y, m, rate) { const i = y * W + x; set(i, SPOUT); aux[i] = m; life[i] = rate; }
+
+  function restore() {
+    clearAll();
+    const ground = new Int16Array(W), rock = new Int16Array(W);
+    for (let x = 0; x < W; x++) {
+      ground[x] = Math.round(150 - (6 * Math.sin(x * 0.035) + 4 * Math.sin(x * 0.11 + 1.3) + 2 * Math.sin(x * 0.27 + 0.4)));
+      rock[x] = Math.round(166 + 3 * Math.sin(x * 0.07) + 2 * Math.sin(x * 0.23 + 2));
+    }
+    for (let x = 16; x <= 84; x++) ground[x] = 143;
+    for (let x = 100; x <= 172; x++) ground[x] = 146;
+    for (let x = 196; x <= 256; x++) ground[x] = 150;
+    for (let x = 0; x < W; x++) for (let y = ground[x]; y < H; y++) put(x, y, y >= rock[x] ? STONE : DIRT);
+
+    // buried bones
+    for (let n = 0; n < 14; n++) {
+      const x = 4 + ((rnd() * (W - 16)) | 0), y = ground[x] + 5 + ((rnd() * 10) | 0);
+      const len = 5 + ((rnd() * 5) | 0), up = rnd() < 0.5;
+      for (let k = 0; k < len; k++) { const xx = x + k, yy = up ? y : y + ((k / 3) | 0); if (yy < rock[Math.min(W - 1, xx)] && type[yy * W + xx] === DIRT) put(xx, yy, BONE); }
+      rect(x - 1, y - 1, x, y, BONE); rect(x + len - 1, y - 1, x + len, y, BONE);
+    }
+
+    // blood vat with a tallow skin
+    rect(16, 140, 84, 142, STONE);
+    rect(16, 104, 18, 142, STONE);
+    rect(82, 104, 84, 142, STONE);
+    rect(19, 116, 81, 139, BLOOD);
+    rect(19, 112, 81, 115, TALLOW);
+    rect(40, 17, 56, 18, STONE);
+    spout(48, 19, BLOOD, 180);
+
+    // open coffin with occupant
+    rect(104, 144, 164, 145, WOOD);
+    rect(104, 128, 105, 145, WOOD);
+    rect(163, 128, 164, 145, WOOD);
+    line(167, 145, 180, 117, WOOD, 2);
+    line(112, 139, 150, 139, BONE);
+    for (let x = 118; x <= 140; x += 4) { put(x, 137, BONE); put(x, 138, BONE); put(x, 140, BONE); put(x, 141, BONE); }
+    rect(151, 136, 155, 141, BONE); put(153, 138, EMPTY); put(152, 139, EMPTY); put(154, 139, EMPTY);
+    rect(106, 132, 162, 143, FLESH, 0.45);
+
+    // eternal brazier
+    rect(186, 112, 189, 146, STONE);
+    rect(182, 110, 193, 111, STONE);
+    rect(182, 104, 182, 111, STONE);
+    rect(193, 104, 193, 111, STONE);
+    spout(187, 109, FIRE, 520);
+    spout(188, 109, FIRE, 520);
+
+    // flesh heap fed by an ichor drip
+    for (let x = 200; x <= 252; x++) {
+      const h = Math.max(0, 22 - Math.abs(x - 226) * 0.8) | 0;
+      for (let y = 150 - h; y < 150; y++) {
+        const r = rnd();
+        if (r < 0.08) put(x, y, BONE); else if (r < 0.92) put(x, y, FLESH);
+      }
+    }
+    rect(218, 30, 234, 31, STONE);
+    spout(226, 32, ICHOR, 50);
+
+    // holy font, far right
+    rect(292, 22, 306, 23, STONE);
+    spout(299, 24, HOLY, 120);
+  }
+
+  // ---------- rendering ----------
+  const view = document.getElementById('view');
+  const vctx = view.getContext('2d');
+  const simC = document.createElement('canvas'); simC.width = W; simC.height = H;
+  const sctx = simC.getContext('2d');
+  const img = sctx.createImageData(W, H), px = new Uint32Array(img.data.buffer);
+  const glowC = document.createElement('canvas'); glowC.width = W; glowC.height = H;
+  const gctx = glowC.getContext('2d');
+  const gimg = gctx.createImageData(W, H), gpx = new Uint32Array(gimg.data.buffer);
+  const BW = W / 2, BH = H / 2;
+  const blurC = document.createElement('canvas'); blurC.width = BW; blurC.height = BH;
+  const bctx = blurC.getContext('2d');
+  const canBlur = typeof bctx.filter === 'string';
+
+  const G_ICHOR_DIM = pack(12, 30, 2);
+  const G_ICHOR = pack(34, 80, 6),G_HOLY = pack(6, 16, 28), G_MIASMA = pack(26, 34, 4);
+  const G_FIRE = [pack(255,190,90), pack(255,150,50), pack(230,100,30), pack(170,60,20), pack(90,25,10), pack(30,8,4)];
+
+  function mixColor(t, o, amt, sh) {
+    const a = amt / 255, ia = 1 - a, s = (sh >> 6) * 3, b0 = t * 12 + s, b1 = o * 12 + s;
+    return pack((PAL_RGB[b0] * ia + PAL_RGB[b1] * a) | 0, (PAL_RGB[b0 + 1] * ia + PAL_RGB[b1 + 1] * a) | 0, (PAL_RGB[b0 + 2] * ia + PAL_RGB[b1 + 2] * a) | 0);
+  }
+  function fireIdx(i) {
+    const l = life[i], h = heat[i];
+    let k = l > 22 ? 1 : l > 12 ? 2 : l > 6 ? 3 : l > 2 ? 4 : 5;
+    if (h > 40 && k > 0) k--;                 // big hot fires burn whiter
+    if (rnd() < 0.35) k = Math.min(5, k + 1);
+    return k;
+  }
+  const BURN_RGB = [[255, 150, 50], [230, 100, 30], [170, 60, 20]];
+
+  function render() {
+    gpx.fill(0);
+    for (let i = 0; i < N; i++) {
+      const t = type[i];
+      if (t === EMPTY) {
+        px[i] = BG[i];
+        const h = heat[i];
+        if (h > 4) gpx[i] = pack(Math.min(90, h * 1.6) | 0, Math.min(35, h * 0.5) | 0, 0);   // hot air glows faintly
+        continue;
+      }
+      const k = KIND[t];
+      if (k === K_GAS) {
+        const c = GAS_RGB[t], a = DEF[t].a * Math.min(1, life[i] / 40), ia = 1 - a;
+        px[i] = pack((BGR[i*3]*ia + c[0]*a) | 0, (BGR[i*3+1]*ia + c[1]*a) | 0, (BGR[i*3+2]*ia + c[2]*a) | 0);
+        if (t === MIASMA) gpx[i] = G_MIASMA;
+      } else if (k === K_FIRE) {
+        const f = fireIdx(i); px[i] = FIRE_PAL[f]; gpx[i] = G_FIRE[f];
+      } else if (burn[i] || t === EMBER) {
+        // burning: the material shows through a flickering glow; embers glow on their own
+        const b = t * 12 + (shade[i] >> 6) * 3, g = BURN_RGB[(rnd() * 3) | 0];
+        const a = t === EMBER ? 0.55 + rnd() * 0.35 : 0.35 + rnd() * 0.4, ia = 1 - a;
+        px[i] = pack((PAL_RGB[b] * ia + g[0] * a) | 0, (PAL_RGB[b + 1] * ia + g[1] * a) | 0, (PAL_RGB[b + 2] * ia + g[2] * a) | 0);
+        gpx[i] = G_FIRE[t === EMBER ? 2 : 3];
+      } else if (k === K_SPOUT) {
+        px[i] = PAL[aux[i] * 4 + 2]; gpx[i] = aux[i] === FIRE ? G_FIRE[1] : 0;
+      } else if (stL[i]) {
+        const st = stT[i];
+        const age = 63 - ((stL[i] * 63 / STAIN_TICKS[st]) | 0);
+        const o = (st * 64 + age) * 4, a = STAIN_LUT[o + 3] / 255 * (stI[i] / 255), ia = 1 - a;
+        const b = t * 12 + (shade[i] >> 6) * 3;
+        px[i] = pack((PAL_RGB[b] * ia + STAIN_LUT[o] * a) | 0, (PAL_RGB[b + 1] * ia + STAIN_LUT[o + 1] * a) | 0, (PAL_RGB[b + 2] * ia + STAIN_LUT[o + 2] * a) | 0);
+        if (STAIN_GLOW[st] && age < 24) gpx[i] = G_ICHOR_DIM;
+      } else if (mxA[i]) {
+        px[i] = mixColor(t, mxT[i], mxA[i], shade[i]);
+        if (t === ICHOR || mxT[i] === ICHOR) gpx[i] = G_ICHOR_DIM; else if (t === HOLY) gpx[i] = G_HOLY;
+      } else {
+        px[i] = PAL[t * 4 + (shade[i] >> 6)];
+        if (t === ICHOR) gpx[i] = G_ICHOR; else if (t === HOLY) gpx[i] = G_HOLY;
+      }
+    }
+    for (let p = 0; p < pc; p++) {
+      const x = Px[p] | 0, y = Py[p] | 0;
+      if (x < 0 || x >= W || y < 0 || y >= H) continue;
+      const i = y * W + x, t = Pt[p];
+      px[i] = Pma[p] ? mixColor(t, Pmt[p], Pma[p], Ps[p]) : PAL[t * 4 + (Ps[p] >> 6)];
+      if (t === ICHOR) gpx[i] = G_ICHOR; else if (t === HOLY) gpx[i] = G_HOLY;
+    }
+    sctx.putImageData(img, 0, 0);
+    gctx.putImageData(gimg, 0, 0);
+    bctx.clearRect(0, 0, BW, BH);
+    if (canBlur) bctx.filter = 'blur(2px)';
+    bctx.drawImage(glowC, 0, 0, BW, BH);
+    if (canBlur) bctx.filter = 'none';
+
+    const dw = view.width, dh = view.height;
+    vctx.globalCompositeOperation = 'source-over';
+    vctx.imageSmoothingEnabled = false;
+    vctx.drawImage(simC, 0, 0, dw, dh);
+    vctx.imageSmoothingEnabled = true;
+    vctx.globalCompositeOperation = 'lighter';
+    vctx.globalAlpha = 0.9;
+    vctx.drawImage(blurC, 0, 0, dw, dh);
+    vctx.globalAlpha = 1;
+    vctx.globalCompositeOperation = 'source-over';
+
+    if (hover) {
+      const sx = dw / W, sy = dh / H;
+      vctx.strokeStyle = erasing || tool === ERASE ? 'rgba(201,90,90,.75)' : 'rgba(221,210,191,.6)';
+      vctx.lineWidth = Math.max(1, dpr);
+      vctx.beginPath();
+      vctx.ellipse((hover.x + 0.5) * sx, (hover.y + 0.5) * sy, Math.max(0.5, brush) * sx, Math.max(0.5, brush) * sy, 0, 0, Math.PI * 2);
+      vctx.stroke();
+    }
+  }
+
+  let dpr = 1;
+  function fit() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    const r = view.getBoundingClientRect();
+    view.width = Math.max(1, Math.round(r.width * dpr));
+    view.height = Math.max(1, Math.round(r.height * dpr));
+  }
+  new ResizeObserver(fit).observe(view);
+  fit();
+
+  // ---------- tools & input ----------
+  const TOOLS = [
+    { id: STONE,  key: '1', desc: 'Holds everything up. It never falls and never burns.' },
+    { id: DIRT,   key: '2', desc: 'Piles and slides. Soaks up blood and turns to mud.' },
+    { id: BONE,   key: '3', desc: 'Rigid scaffolding. Fire passes it by.' },
+    { id: WOOD,   key: '4', desc: 'Rigid. Slow to catch, burns for a long time, and sheds glowing embers that fall away.' },
+    { id: FLESH,  key: '5', desc: 'Slumps straight down. Rots in ichor. Burns slowly, dripping rendered tallow.' },
+    { id: BLOOD,  key: '6', desc: 'Runs freely and stains heavily. Thins into holy water where they meet. Stains dry brown.' },
+    { id: HOLY,   key: '7', desc: 'Thin, fast and splashy. Leaves a wet sheen, scrubs other stains and boils ichor away.' },
+    { id: ICHOR,  key: '8', desc: 'Thick and heavy. Leaves a faintly glowing stain. Rots flesh into miasma.' },
+    { id: TALLOW, key: '9', desc: 'Floats on every other fluid. A pool burns down slowly from its surface; airborne fat flashes.' },
+    { id: FIRE,   key: '0', desc: 'A torch. Heats what you hold it on until it catches. Bigger fires run hotter and spread faster.' },
+    { id: MIASMA, key: 'M', desc: 'Lingers and drifts upward. Flashes the moment it gets hot, and the flash sets off the rest.' },
+    { id: ERASE,  key: 'E', desc: 'Clears cells, stone included. Right-click erases with any reagent.' },
+  ];
+  const FILL = { [K_STATIC]: 1, [K_POWDER]: 0.45, [K_LIQUID]: 0.5, [K_GAS]: 0.3 };
+
+  let tool = BLOOD, brush = 5, paused = false, down = false, erasing = false, hover = null, last = null;
+
+  const matsEl = document.getElementById('mats');
+  const swatchBg = t => {
+    if (t === ERASE) return 'repeating-linear-gradient(45deg,#2a2226 0 3px,#110e12 3px 6px)';
+    const c = DEF[t].c, a = c[0], b = c[1 % c.length], d = c[2 % c.length], e = c[3 % c.length];
+    if (t === FIRE) return 'linear-gradient(#ffd166,#e0602a)';
+    return `conic-gradient(${a} 25%, ${b} 0 50%, ${d} 0 75%, ${e} 0)`;
+  };
+  TOOLS.forEach(tl => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mat'; b.id = 'mat-' + tl.key;
+    b.setAttribute('aria-pressed', 'false');
+    const name = tl.id === ERASE ? 'Eraser' : DEF[tl.id].name;
+    b.innerHTML = `<span class="sw"></span><span class="nm"></span><span class="k"></span>`;
+    b.querySelector('.sw').style.background = swatchBg(tl.id);
+    b.querySelector('.sw').style.backgroundSize = '8px 8px';
+    b.querySelector('.nm').textContent = name;
+    b.querySelector('.k').textContent = tl.key;
+    b.addEventListener('click', () => pick(tl.id));
+    tl.el = b; tl.name = name;
+    matsEl.appendChild(b);
+  });
+  function pick(id) {
+    tool = id;
+    TOOLS.forEach(tl => tl.el.setAttribute('aria-pressed', tl.id === id ? 'true' : 'false'));
+    const tl = TOOLS.find(t => t.id === id);
+    document.getElementById('d-name').textContent = tl.name;
+    document.getElementById('d-desc').textContent = tl.desc;
+  }
+  pick(BLOOD);
+
+  const RX = [
+    ['Blood', 'Grave Dirt', 'Mud'],
+    ['Ichor', 'Flesh', 'Miasma'],
+    ['Ichor', 'Holy Water', 'Steam'],
+    ['Heat', 'Coffin Wood', 'Embers, Ash, Smoke'],
+    ['Heat', 'Flesh', 'Dripping Tallow, Ash'],
+    ['Heat', 'Tallow pool', 'Burns down from the top'],
+    ['Heat', 'Airborne Tallow', 'Flash'],
+    ['Heat', 'Miasma', 'Flash burn'],
+    ['Heat', 'Ichor', 'Miasma'],
+    ['Holy Water', 'Fire', 'Steam, quenched'],
+    ['Steam', 'time', 'Holy Water, sometimes'],
+    ['Blood', 'Holy Water', 'Blends into a pink fade'],
+    ['Blood', 'Ichor', 'Slowly tainted'],
+    ['Holy Water', 'any stain', 'Clean surface'],
+    ['Blood stain', 'time', 'Dried brown, then gone'],
+  ];
+  const rxEl = document.getElementById('rx');
+  RX.forEach(([a, b, c]) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span></span><span class="op">+</span><span></span><span class="op">→</span><span class="out"></span>`;
+    const s = li.querySelectorAll('span');
+    s[0].textContent = a; s[2].textContent = b; s[4].textContent = c;
+    rxEl.appendChild(li);
+  });
+
+  function paintAt(cx, cy) {
+    const r = brush, rr = r * r + r * 0.6;
+    const t = erasing ? ERASE : tool;
+    const fill = t === ERASE ? 1 : t === FIRE ? 0 : (FILL[KIND[t]] || 1);
+    for (let dy = -r; dy <= r; dy++) {
+      const y = cy + dy; if (y < 0 || y >= H) continue;
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > rr) continue;
+        const x = cx + dx; if (x < 0 || x >= W) continue;
+        const i = y * W + x, tt = type[i];
+        if (t === ERASE) { if (tt) set(i, EMPTY); continue; }
+        if (t === FIRE) {
+          heat[i] += 2.2;                                                   // a torch: heats whatever it's held against
+          if ((tt === EMPTY || KIND[tt] === K_GAS) && rnd() < 0.18) setFlame(i, 14, 30);
+          continue;
+        }
+        if (tt !== EMPTY && KIND[tt] !== K_GAS) continue;
+        if (rnd() < fill) set(i, t);
+      }
+    }
+  }
+  function strokeTo(p) {
+    if (!last) { paintAt(p.x, p.y); last = p; return; }
+    const n = Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / Math.max(1, brush * 0.5)));
+    for (let s = 1; s <= n; s++) paintAt(Math.round(last.x + (p.x - last.x) * s / n), Math.round(last.y + (p.y - last.y) * s / n));
+    last = p;
+  }
+  function cellOf(e) {
+    const r = view.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(W - 1, Math.floor((e.clientX - r.left) / r.width * W))),
+      y: Math.max(0, Math.min(H - 1, Math.floor((e.clientY - r.top) / r.height * H))),
+    };
+  }
+  view.addEventListener('contextmenu', e => e.preventDefault());
+  view.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { view.setPointerCapture(e.pointerId); } catch (_) {}
+    down = true; erasing = e.button === 2; last = null;
+    hover = cellOf(e); strokeTo(hover);
+  });
+  view.addEventListener('pointermove', e => {
+    hover = cellOf(e);
+    if (down) strokeTo(hover);
+  });
+  const end = () => { down = false; erasing = false; last = null; };
+  view.addEventListener('pointerup', end);
+  view.addEventListener('pointercancel', end);
+  view.addEventListener('pointerleave', () => { if (!down) hover = null; });
+
+  const brushEl = document.getElementById('brush'), brushOut = document.getElementById('brush-out');
+  function setBrush(v) { brush = Math.max(1, Math.min(24, v)); brushEl.value = brush; brushOut.textContent = brush; }
+  brushEl.addEventListener('input', () => setBrush(+brushEl.value));
+
+  const pausedEl = document.getElementById('paused'), pauseL = document.getElementById('b-pause-l');
+  function setPaused(p) { paused = p; pausedEl.hidden = !p; pauseL.textContent = p ? 'Resume' : 'Pause'; }
+  document.getElementById('b-pause').addEventListener('click', () => setPaused(!paused));
+  document.getElementById('b-step').addEventListener('click', () => { setPaused(true); step(); });
+  document.getElementById('b-restore').addEventListener('click', restore);
+  document.getElementById('b-clear').addEventListener('click', clearAll);
+
+  window.addEventListener('keydown', e => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k === ' ') { e.preventDefault(); setPaused(!paused); return; }
+    if (k === '.') { setPaused(true); step(); return; }
+    if (k === '[') { setBrush(brush - 1); return; }
+    if (k === ']') { setBrush(brush + 1); return; }
+    if (k === 'r' || k === 'R') { restore(); return; }
+    if (k === 'c' || k === 'C') { clearAll(); return; }
+    const tl = TOOLS.find(t => t.key.toLowerCase() === k.toLowerCase());
+    if (tl) pick(tl.id);
+  });
+
+  // ---------- readout & loop ----------
+  const roXY = document.getElementById('ro-xy'), roMat = document.getElementById('ro-mat'),
+        roN = document.getElementById('ro-n'), roF = document.getElementById('ro-fps'),
+        roS = document.getElementById('ro-s');
+  function cellName(i) {
+    const t = type[i];
+    if (t === EMPTY) return 'empty';
+    if (t === SPOUT) return DEF[aux[i]].name + ' spout';
+    if (t === FIRE) return 'Flame';
+    if (burn[i] && t !== EMBER) return 'Burning ' + DEF[t].name.toLowerCase();
+    return DEF[t].name;
+  }
+
+  restore();
+  for (let s = 0; s < 40; s++) step(); // let the scene settle before first paint
+
+  let acc = 0, prev = performance.now(), frames = 0, fpsT = prev, tick = 0;
+  const DT = 1000 / 60;
+  function loop(now) {
+    const dt = Math.min(100, now - prev); prev = now;
+    if (down && hover && !paused) paintAt(hover.x, hover.y);
+    if (!paused) {
+      acc += dt;
+      let n = 0;
+      while (acc >= DT && n < 3) { step(); acc -= DT; n++; }
+      if (n === 3) acc = 0;
+    }
+    render();
+    frames++;
+    if (now - fpsT >= 500) { roF.textContent = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; }
+    if (++tick % 20 === 0) {
+      let c = 0;
+      for (let i = 0; i < N; i++) if (MOVABLE[type[i]] && type[i]) c++;
+      roN.textContent = (c + pc).toLocaleString();
+      roS.textContent = pc.toLocaleString();
+    }
+    if (hover) {
+      const hi = hover.y * W + hover.x;
+      roXY.textContent = hover.x + ', ' + hover.y;
+      roMat.textContent = cellName(hi) + (heat[hi] >= 1 ? ' · heat ' + Math.round(heat[hi]) : '');
+    }
+    else { roXY.textContent = '—'; roMat.textContent = '—'; }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>
