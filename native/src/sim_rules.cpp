@@ -532,7 +532,18 @@ void SandWorld::update_powder(int i, int x, int y, int t) {
 	}
 	if (!mov[i]) return; // at rest: stays put until disturbed
 	const MatDef &pd = md(t);
-	if (rnd() < pd.fric) { // friction brings it to rest
+	float d = pd.density;
+	int b = i + w;
+	// REPOSE: perched over a drop deeper than its material allows, it can't stop; it has to slide on
+	bool steep = false;
+	for (int dx = -1; dx <= 1 && !steep; dx += 2) {
+		int nx = x + dx;
+		if (nx < 0 || nx >= w || !movable(mat[i + dx]) || dens(mat[i + dx]) >= d) continue;
+		int k = 0;
+		for (int q = b + dx; k <= pd.repose && q < n && movable(mat[q]) && dens(mat[q]) < d; q += w) k++;
+		steep = k > pd.repose;
+	}
+	if (!steep && rnd() < pd.fric) { // friction brings it to rest
 		mov[i] = 0;
 		return;
 	}
@@ -540,8 +551,6 @@ void SandWorld::update_powder(int i, int x, int y, int t) {
 		wake_i(i);
 		return;
 	}
-	float d = pd.density;
-	int b = i + w;
 	int s = rnd() < 0.5f ? -1 : 1;
 	for (int k = 0; k < 2; k++) {
 		int dx = k ? -s : s, nx = x + dx;
@@ -623,6 +632,11 @@ bool SandWorld::liquid_side_effects(int i, int x, int y, int &t) {
 }
 
 void SandWorld::update_liquid(int i, int x, int y, int t) {
+	// deep inside a still pool of one liquid nothing can happen to a cell, so skip it (the pool's edges do the work)
+	if (x > 0 && x < w - 1 && y > 0 && y < h - 1 && mat[i - 1] == t && mat[i + 1] == t && mat[i - w] == t && mat[i + w] == t &&
+			!mx_a[i] && !plg[i] && fvy[i] == 0 && fvx[i] == 0) {
+		return;
+	}
 	if (liquid_side_effects(i, x, y, t)) return;
 	const MatDef &ld = md(t);
 	float d = ld.density;

@@ -70,6 +70,7 @@ struct MatDef {
 
 	// filled from tuning.h
 	float fric = 0.08f, skid = 0.0f, slump = 1.0f; // powders
+	uint8_t repose = 2; // powders: tallest ledge a grain rests beside
 	float soak = 0.0f, absorb = 0.0f; // stains: how deep they soak in; liquids: how fast this ground drinks
 	uint8_t loose = 0; // what it crumbles into when it breaks off (0 = stays itself)
 	bool stains = false; // liquids that leave stains

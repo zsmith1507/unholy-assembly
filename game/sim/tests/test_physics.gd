@@ -90,7 +90,10 @@ func run(t) -> void:
 	w = _basin(96, 64, 3)
 	w.fill_rect(20, 40, 56, 16, SandWorld.M_TALLOW)
 	_run(w, 120)
-	w.ignite(48, 39, 6)
+	var surf := 0
+	while surf < 56 and w.get_mat(48, surf) != SandWorld.M_TALLOW:
+		surf += 1
+	w.ignite(48, surf - 1, 6)
 	_run(w, 60)
 	var burning_top := 0
 	var burning_deep := 0

@@ -48,6 +48,10 @@ constexpr MatVal FRIC[] = {
 };
 // SKID: fine stuff skids sideways off a slope before it stops, so it lies flatter.
 constexpr MatVal SKID[] = { { ASH, 0.55f }, { EMBER, 0.3f }, { SAND, 0.15f } };
+// REPOSE (new): the tallest ledge, in cells, a grain will come to rest beside. A grain sitting over a deeper drop keeps
+// sliding whatever its FRIC, so nothing stacks into a pillar; with FRIC this sets each material's angle of repose.
+constexpr int REPOSE_DEFAULT = 1;
+constexpr MatVal REPOSE[] = { { FLESH, 2 }, { GIBS, 2 }, { MUD, 2 } };
 // SLUMP: chance per tick a sliding grain actually moves (flesh slumps, mud is sluggish). Not listed = always.
 constexpr MatVal SLUMP[] = { { FLESH, 0.12f }, { MUD, 0.35f }, { GIBS, 0.15f } };
 

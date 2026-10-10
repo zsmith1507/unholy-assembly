@@ -46,6 +46,7 @@ func run(t) -> void:
 		widths[m] = x1 - x0
 	t.note("pile width: ash %d, flesh %d" % [widths[SandWorld.M_ASH], widths[SandWorld.M_FLESH]])
 	t.check(widths[SandWorld.M_ASH] > widths[SandWorld.M_FLESH], "ash spreads wider than flesh")
+	t.check(widths[SandWorld.M_FLESH] >= 12, "flesh slumps into a heap, not a pillar")
 
 	# --- coffin wood burns slowly and leaves embers; it is not gone in a flash
 	w = Sim.create(128, 96, 5)

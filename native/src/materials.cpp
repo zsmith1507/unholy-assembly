@@ -133,6 +133,12 @@ void init_materials() {
 	for (const MatVal &v : FRIC) {
 		g_defs[v.mat].fric = v.v;
 	}
+	for (int t = 0; t < MAT_COUNT; t++) {
+		g_defs[t].repose = (uint8_t)REPOSE_DEFAULT;
+	}
+	for (const MatVal &v : REPOSE) {
+		g_defs[v.mat].repose = (uint8_t)v.v;
+	}
 	for (const MatVal &v : SKID) {
 		g_defs[v.mat].skid = v.v;
 	}
