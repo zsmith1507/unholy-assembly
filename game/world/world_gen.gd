@@ -49,7 +49,9 @@ const HOME_STYLES := [
 const CHAPEL := {"width": 60, "wall_h": 46, "roof_h": 14, "steeple_h": 24, "door_h": 34, "wall": 3}
 
 ## Coffins hold a laid-out adult (about 52 px, 26 cells long).
-const GRAVES := {"count": 6, "pitch": 38, "coffin": Vector2i(34, 8), "depth": [10, 15], "margin": 8}
+const GRAVES := {"count": 6, "pitch": 38, "coffin": Vector2i(34, 8), "depth": [10, 15], "margin": 8,
+	"shaft": 20, ## width of the loose grave dirt over each coffin
+	"stone_h": [13, 18]}
 
 ## A forgotten catacomb gallery under the left forest: a taste of the deep.
 const CATACOMB := {"size": Vector2i(90, 16), "depth": 250, "offset_x": 200}
@@ -529,10 +531,11 @@ func _graveyard() -> void:
 		var gx: int = x0 + GRAVES.margin + i * GRAVES.pitch
 		var cs: Vector2i = GRAVES.coffin
 		var depth := rng.randi_range(GRAVES.depth[0], GRAVES.depth[1])
-		_tombstone(gx + (2 if i % 2 == 0 else cs.x - 8), gy - 1)
+		_tombstone(gx + (1 if i % 2 == 0 else cs.x - 9), gy - 1)
 		# Grave dirt over the coffin: loose, easy digging, with a low mound.
-		w.fill_rect(gx, gy, cs.x, depth, SandWorld.M_DIRT)
-		w.fill_rect(gx + 3, gy - 1, cs.x - 6, 1, SandWorld.M_DIRT)
+		var sh: int = GRAVES.shaft
+		w.fill_rect(gx + (cs.x - sh) / 2, gy, sh, depth, SandWorld.M_DIRT)
+		w.fill_rect(gx + (cs.x - sh) / 2 + 2, gy - 1, sh - 4, 1, SandWorld.M_DIRT)
 		# Hollow coffin: a wood shell, big enough for an adult laid out.
 		var cr := Rect2i(gx, gy + depth, cs.x, cs.y)
 		w.fill_rect(cr.position.x, cr.position.y, cr.size.x, cr.size.y, SandWorld.M_WOOD)
@@ -548,29 +551,32 @@ func _graveyard() -> void:
 ## A headstone on the ground line (scenery): rounded slab, carved cross slab, or wooden cross.
 func _tombstone(x: int, base_y: int) -> void:
 	var kind := rng.randi_range(0, 2)
-	var th := rng.randi_range(9, 13)
-	var lean := rng.randi_range(-1, 1) if rng.randf() < 0.4 else 0
+	var th := rng.randi_range(GRAVES.stone_h[0], GRAVES.stone_h[1])
+	var lean := rng.randi_range(-2, 2) if rng.randf() < 0.4 else 0
 	if kind == 2:
-		_sc_rect(x + 2, base_y - th, 2, th + 1, PAL.dead)
-		_sc_rect(x, base_y - th + 3, 6, 2, PAL.dead)
-		tombstones.append(Rect2i(x, base_y - th, 6, th + 1))
+		_sc_rect(x + 3, base_y - th, 2, th + 1, PAL.dead)
+		_sc_rect(x, base_y - th + 4, 8, 2, PAL.dead)
+		tombstones.append(Rect2i(x, base_y - th, 8, th + 1))
 		return
+	var ww := 8
 	for yy in range(0, th + 1):
 		var y := base_y - yy
-		var off := (lean * yy) / 6
+		var off := (lean * yy) / th
 		var inset := 0
-		if kind == 0 and yy >= th - 1:
-			inset = 1 if yy == th - 1 else 2
-		for xx in range(inset, 6 - inset):
+		if kind == 0 and yy >= th - 2:
+			inset = yy - (th - 3)
+		for xx in range(inset, ww - inset):
 			var c := _tone(PAL.stone, x + xx, y)
-			if yy < 3 and _hash(x + xx, y) % 3 == 0:
+			if yy < 4 and _hash(x + xx, y) % 3 == 0:
 				c = PAL.moss[_hash(x, y + xx) % 2]
-			var cross_v := (xx == 2 or xx == 3) and yy >= th - 7 and yy <= th - 2
-			var cross_h := yy == th - 4 and xx >= 1 and xx <= 4
+			if xx == ww - 1 - inset or yy == th:
+				c = c.darkened(0.2) # shaded edge
+			var cross_v := (xx == 3 or xx == 4) and yy >= th - 10 and yy <= th - 3
+			var cross_h := yy == th - 5 and xx >= 1 and xx <= 6
 			if kind == 1 and (cross_v or cross_h):
-				c = c.darkened(0.35)
+				c = c.darkened(0.4)
 			_sc(x + xx + off, y, c)
-	tombstones.append(Rect2i(x - 1, base_y - th, 8, th + 1))
+	tombstones.append(Rect2i(x - 2, base_y - th, ww + 4, th + 1))
 
 
 # ---------------------------------------------------------------- fields
