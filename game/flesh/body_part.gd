@@ -19,6 +19,10 @@ const PART := {
 	"pull_scale": {"arm": 1.0, "head": 0.95, "leg": 0.85, "torso": 0.75},
 	"sleep_speed": 0.03,
 	"sleep_ticks": 40,
+	"unstick_ticks": 45, ## pulled this long without headway, the grave-wind draws it through the earth regardless
+	"unstick_speed": 0.15,
+	"ghost_ticks": 20,
+	"lead": 0.5, ## Harvest pulls the leading end this much harder (and the trailing end this much softer)
 }
 
 var look := "villager"
@@ -31,6 +35,10 @@ var pa := Vector2.ZERO
 var pb := Vector2.ZERO
 var length := 10.0
 var asleep := false
+var ghost_a := -1 ## >= 0: this end passes through earth while pulled (ticks forced), until it reaches air
+var ghost_b := -1
+var pull_t := 0 ## ticks left in which the part counts as being pulled
+var _stuck_pull := 0
 var _sprite: Sprite2D
 var _last_pos := Vector2.ZERO
 var _old := false
@@ -101,15 +109,22 @@ func _step() -> void:
 	var va := (a - pa) * PART.damping + Vector2(0, PART.gravity)
 	var vb := (b - pb) * PART.damping + Vector2(0, PART.gravity)
 	pa = a; pb = b
-	a = BodyRig.collide_point(a, a + va)
-	b = BodyRig.collide_point(b, b + vb)
+	var ga := pull_t > 0 and ghost_a >= 0
+	var gb := pull_t > 0 and ghost_b >= 0
+	a = BodyRig.collide_point(a, a + va, ga)
+	b = BodyRig.collide_point(b, b + vb, gb)
 	var d := b - a
 	var l := maxf(0.001, d.length())
 	var diff := (l - length) / l * 0.5
 	var na := a + d * diff
 	var nb := b - d * diff
-	if not Sim.solid_at(na) or Sim.solid_at(a): a = na
-	if not Sim.solid_at(nb) or Sim.solid_at(b): b = nb
+	a = BodyRig.collide_point(a, na, ga)
+	b = BodyRig.collide_point(b, nb, gb)
+	if ghost_a >= 0:
+		ghost_a = maxi(0, ghost_a - 1) if (ghost_a > 0 or Sim.solid_at(a)) else -1
+	if ghost_b >= 0:
+		ghost_b = maxi(0, ghost_b - 1) if (ghost_b > 0 or Sim.solid_at(b)) else -1
+	pull_t = maxi(0, pull_t - 1)
 	if Sim.solid_at(a + Vector2(0, 1.5)):
 		pa.x = a.x - (a.x - pa.x) * PART.ground_friction
 	if Sim.solid_at(b + Vector2(0, 1.5)):
@@ -155,8 +170,19 @@ func apply_pull(force: Vector2) -> void:
 	asleep = false
 	_still = 0
 	var f: Vector2 = force * float(PART.pull_scale.get(part, 0.85))
-	a = BodyRig.collide_point(a, a + f)
-	b = BodyRig.collide_point(b, b + f)
+	# the end nearer the pull leads and the other trails, so a dragged limb swings round to follow
+	var lead := clampf((b - a).normalized().dot(f.normalized()), -1.0, 1.0) * PART.lead if f != Vector2.ZERO else 0.0
+	pull_t = 3
+	if velocity.dot(f.normalized()) < PART.unstick_speed:
+		_stuck_pull += 1
+		if _stuck_pull >= PART.unstick_ticks:
+			_stuck_pull = 0
+			ghost_a = PART.ghost_ticks
+			ghost_b = PART.ghost_ticks
+	else:
+		_stuck_pull = 0
+	a = BodyRig.collide_point(a, a + f * (1.0 - lead), ghost_a >= 0)
+	b = BodyRig.collide_point(b, b + f * (1.0 + lead), ghost_b >= 0)
 
 
 ## Siphon asks for `amount` souls' worth; returns what it got. Fresh (bloody) parts give double.

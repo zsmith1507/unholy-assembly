@@ -34,7 +34,11 @@ const CORPSE := {
 	"sleep_speed": 0.03, ## px per tick: slower than this for sleep_ticks and the ragdoll stops simulating
 	"sleep_ticks": 45,
 	"topple": 0.7, ## px per tick: a body that dies standing has its upper half pushed over so it falls down
-	"jitter": 0.15, ## px per tick of random wobble per point at death, so no two bodies fall alike
+	"lead": 0.5, ## Harvest pulls the body's leading end this much harder, its trailing end this much softer
+	"jitter": 0.15,
+	"unstick_ticks": 60, ## pulled this long without headway, the grave-wind draws it through the earth regardless
+	"unstick_speed": 0.15, ## px per tick toward the pull that counts as headway
+	"ghost_ticks": 20, ## how long a body drawn through earth keeps passing through it after reaching air ## px per tick of random wobble per point at death, so no two bodies fall alike
 }
 
 var look := "villager"
@@ -47,6 +51,9 @@ var prev := {} ## point name -> world position last tick
 var attached := {} ## seg key -> true while still on the body
 var strain := {} ## seg key -> accumulated strain
 var wounds: Array = [] ## [{pt: String, strength: float}]
+var ghost := {} ## point name -> ticks: passes through earth while pulled (see exhume, apply_pull); gone once in air
+var _pull_t := 0 ## ticks left in which the body counts as being pulled
+var _stuck_pull := 0 ## ticks the pull has made no headway
 var asleep := false
 var _pulled := false
 var _rig: BodyRig
@@ -113,6 +120,10 @@ func exhume() -> void:
 		return
 	interred = false
 	visible = true
+	# the coffin is snug and the grave dirt is packed round it: whatever is in the earth passes up through it
+	for k in pts:
+		if Sim.solid_at(pts[k]):
+			ghost[k] = 0
 	remove_from_group(&"grave_corpses")
 	add_to_group(&"item_corpse")
 	asleep = false
@@ -140,6 +151,7 @@ func _physics_process(delta: float) -> void:
 		for k in strain:
 			strain[k] *= CORPSE.strain_relax
 	_pulled = false
+	_pull_t = maxi(0, _pull_t - 1)
 	_bleed(delta)
 	if not asleep or carrier != null:
 		_redraw_rig()
@@ -162,12 +174,16 @@ func _step() -> void:
 		var v: Vector2 = (p - prev[k]) * CORPSE.damping
 		v.y += CORPSE.gravity
 		prev[k] = p
-		pts[k] = BodyRig.collide_point(p, p + v)
+		pts[k] = BodyRig.collide_point(p, p + v, _g(k))
 	for i in CORPSE.iterations:
 		for seg in BodyRig.SEGS:
 			if not attached.get(seg[0], false):
 				continue
 			_constrain(seg[1], seg[2], BodyRig.RIG[BodyRig.PART[seg[0]]])
+	for k in ghost.keys():
+		ghost[k] -= 1
+		if ghost[k] <= 0 and not Sim.solid_at(pts[k]):
+			ghost.erase(k)
 	# floor friction: a point resting on ground loses most of its sideways speed
 	for k in live:
 		if Sim.solid_at(pts[k] + Vector2(0, 1.5)):
@@ -188,10 +204,8 @@ func _constrain(a: String, b: String, length: float) -> void:
 	var diff := (l - length) / l * 0.5
 	var na := pa + d * diff
 	var nb := pb - d * diff
-	if not Sim.solid_at(na) or Sim.solid_at(pa):
-		pts[a] = na
-	if not Sim.solid_at(nb) or Sim.solid_at(pb):
-		pts[b] = nb
+	pts[a] = BodyRig.collide_point(pa, na, _g(a))
+	pts[b] = BodyRig.collide_point(pb, nb, _g(b))
 
 
 func _check_sleep() -> void:
@@ -204,6 +218,11 @@ func _check_sleep() -> void:
 		_still = 0
 		for k in pts:
 			prev[k] = pts[k]
+
+
+## True if point `k` passes through earth this tick (only while Harvest is pulling).
+func _g(k: String) -> bool:
+	return _pull_t > 0 and ghost.has(k)
 
 
 func wake() -> void:
@@ -272,8 +291,25 @@ func apply_pull(force: Vector2) -> void:
 	wake()
 	_pulled = true
 	var body_force := force * CORPSE.pull_scale
-	for k in _live_points():
-		pts[k] = BodyRig.collide_point(pts[k], pts[k] + body_force)
+	# points further along the pull lead and the rest trail, so the body swings round and follows like a rope
+	var dir := force.normalized()
+	var live := _live_points()
+	var c := Vector2.ZERO
+	for k in live:
+		c += pts[k]
+	c /= float(live.size())
+	_pull_t = 3
+	if body_velocity().dot(dir) < CORPSE.unstick_speed:
+		_stuck_pull += 1
+		if _stuck_pull >= CORPSE.unstick_ticks:
+			_stuck_pull = 0
+			for k in live:
+				ghost[k] = CORPSE.ghost_ticks
+	else:
+		_stuck_pull = 0
+	for k in live:
+		var lead := clampf((pts[k] - c).dot(dir) / 20.0, -1.0, 1.0) * CORPSE.lead
+		pts[k] = BodyRig.collide_point(pts[k], pts[k] + body_force * (1.0 + lead), _g(k))
 	var f := force.length()
 	var stuck := body_velocity().length() < CORPSE.stuck_speed
 	var gain := f * (1.0 if stuck else CORPSE.free_strain)
@@ -286,7 +322,7 @@ func apply_pull(force: Vector2) -> void:
 			continue
 		var w: float = BodyRig.WEIGHT[k]
 		var tip: Vector2 = pts[seg[2]]
-		pts[seg[2]] = BodyRig.collide_point(tip, tip + force * CORPSE.flail / w)
+		pts[seg[2]] = BodyRig.collide_point(tip, tip + force * CORPSE.flail / w, _g(seg[2]))
 		strain[k] += gain / w
 		var left: float = limit * w - strain[k]
 		if left < weakest_left:
@@ -325,6 +361,10 @@ func _tear_one(k: String) -> Node2D:
 	data["parts"] = attached.keys().filter(func(x): return attached[x])
 	var bleeding := fresh and blood > 0.0
 	var part := _spawn_part(BodyRig.PART[k], a, b, (b - prev[seg[2]]) * 1.2)
+	part.ghost_a = int(ghost.get(seg[1], -1))
+	part.ghost_b = int(ghost.get(seg[2], -1))
+	part.pull_t = _pull_t
+	ghost.erase(seg[2])
 	if bleeding:
 		Sim.spill_px(a, SandWorld.M_BLOOD, int(CORPSE.tear_spurt * blood), (b - a).normalized() * 1.5)
 		wounds.append({"pt": seg[1], "strength": 1.0})
@@ -335,6 +375,9 @@ func _tear_one(k: String) -> Node2D:
 func _become_torso() -> Node2D:
 	attached["torso"] = false
 	var part := _spawn_part("torso", pts["hip"], pts["neck"], body_velocity())
+	part.ghost_a = int(ghost.get("hip", -1))
+	part.ghost_b = int(ghost.get("neck", -1))
+	part.pull_t = _pull_t
 	queue_free()
 	return part
 

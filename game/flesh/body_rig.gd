@@ -139,19 +139,28 @@ static func grave_pose(center: Vector2, facing: int = 1) -> Dictionary:
 
 
 ## One verlet point moving from `from` to `to` through the sand world. Solid ground blocks; it slides
-## along walls. A point already stuck inside the earth (buried, or sand settled on it) can only move up
-## or sideways, never sink: that is how Harvest draws a body up through grave dirt.
-static func collide_point(from: Vector2, to: Vector2) -> Vector2:
+## along walls. A point already stuck inside the earth (sand settled on it) can only rise straight up,
+## never sink or slide through it. A `ghost` point (a body Harvest is drawing up out of its grave, or one
+## that has been stuck against the pull too long) passes up or sideways through earth, never down.
+static func collide_point(from: Vector2, to: Vector2, ghost := false) -> Vector2:
 	if Sim.world == null or not Sim.solid_at(to):
 		return to
+	if ghost:
+		return Vector2(to.x, minf(to.y, from.y)) # through the earth sideways or up, never down into it
 	if Sim.solid_at(from):
-		return to if to.y <= from.y + 0.01 else Vector2(to.x, from.y)
+		return Vector2(from.x, minf(to.y, from.y))
 	var tx := Vector2(to.x, from.y)
 	if not Sim.solid_at(tx):
 		return tx
 	var ty := Vector2(from.x, to.y)
 	if not Sim.solid_at(ty):
 		return ty
+	# jammed in a corner: try sliding off at an angle, so a body dragged up a crooked tunnel works free
+	var d := to - from
+	for ang in [0.8, -0.8]:
+		var t2: Vector2 = from + d.rotated(ang) * 0.7
+		if not Sim.solid_at(t2):
+			return t2
 	return from
 
 
