@@ -23,6 +23,11 @@ func get_rect() -> Rect2:
 	return Rect2(global_position.x - footprint.x * 0.5, global_position.y - footprint.y, footprint.x, footprint.y)
 
 
+## The Necromancer measures his interact reach (24 px) to this box, so he can use a machine from either side.
+func get_box() -> Rect2:
+	return get_rect()
+
+
 ## Middle of the footprint, pixels.
 func center() -> Vector2:
 	return global_position - Vector2(0, footprint.y * 0.5)
