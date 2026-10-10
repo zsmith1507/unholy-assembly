@@ -155,8 +155,8 @@ func apply_pull(force: Vector2) -> void:
 	asleep = false
 	_still = 0
 	var f: Vector2 = force * float(PART.pull_scale.get(part, 0.85))
-	a += f
-	b += f
+	a = BodyRig.collide_point(a, a + f)
+	b = BodyRig.collide_point(b, b + f)
 
 
 ## Siphon asks for `amount` souls' worth; returns what it got. Fresh (bloody) parts give double.
@@ -169,6 +169,6 @@ func siphon(amount: float) -> float:
 	if _sprite:
 		_sprite.modulate = Color(0.45, 0.42, 0.4).lerp(PART.old_tint if _old else Color.WHITE, clampf(flesh, 0.0, 1.0))
 	if flesh <= 0.0:
-		Sim.spill_px(global_position, SandWorld.M_ASH, 4, Vector2(0, -0.2))
+		Sim.spill_px(global_position + Vector2(0, -4), SandWorld.M_ASH, 4, Vector2(0, -0.8))
 		queue_free()
 	return take * worth

@@ -33,6 +33,8 @@ const CORPSE := {
 	"ash_cells": 22,
 	"sleep_speed": 0.03, ## px per tick: slower than this for sleep_ticks and the ragdoll stops simulating
 	"sleep_ticks": 45,
+	"topple": 0.7, ## px per tick: a body that dies standing has its upper half pushed over so it falls down
+	"jitter": 0.15, ## px per tick of random wobble per point at death, so no two bodies fall alike
 }
 
 var look := "villager"
@@ -64,9 +66,14 @@ func setup(look_name: String, pose: Dictionary, vel := Vector2.ZERO, is_fresh :=
 	fresh = is_fresh
 	blood = 1.0 if fresh else 0.0
 	flesh = 1.0 if fresh else CORPSE.old_flesh
+	var tip_dir := signf(vel.x) if absf(vel.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
+	var upright: bool = pose["top"].y < pose["hip"].y - 10.0
 	for k in BodyRig.PT_NAMES:
 		pts[k] = pose[k]
-		prev[k] = pose[k] - vel
+		var v := vel + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * CORPSE.jitter
+		if upright and k in ["neck", "top", "handB", "handF"]:
+			v.x += tip_dir * CORPSE.topple * (1.4 if k == "top" else 1.0)
+		prev[k] = pose[k] - v
 	for seg in BodyRig.SEGS:
 		attached[seg[0]] = true
 		strain[seg[0]] = 0.0
@@ -224,7 +231,7 @@ func drop(at: Vector2, vel: Vector2 = Vector2.ZERO) -> void:
 	carrier = null
 	reserved_by = null
 	exhume()
-	var shift := at - pts.get("hip", global_position)
+	var shift: Vector2 = at - pts.get("hip", global_position)
 	for k in pts:
 		pts[k] += shift
 		prev[k] = pts[k] - vel
@@ -266,7 +273,7 @@ func apply_pull(force: Vector2) -> void:
 	_pulled = true
 	var body_force := force * CORPSE.pull_scale
 	for k in _live_points():
-		pts[k] += body_force
+		pts[k] = BodyRig.collide_point(pts[k], pts[k] + body_force)
 	var f := force.length()
 	var stuck := body_velocity().length() < CORPSE.stuck_speed
 	var gain := f * (1.0 if stuck else CORPSE.free_strain)
@@ -278,7 +285,8 @@ func apply_pull(force: Vector2) -> void:
 		if k == "torso" or not attached.get(k, false):
 			continue
 		var w: float = BodyRig.WEIGHT[k]
-		pts[seg[2]] += force * CORPSE.flail / w
+		var tip: Vector2 = pts[seg[2]]
+		pts[seg[2]] = BodyRig.collide_point(tip, tip + force * CORPSE.flail / w)
 		strain[k] += gain / w
 		var left: float = limit * w - strain[k]
 		if left < weakest_left:
@@ -369,5 +377,5 @@ func siphon(amount: float) -> float:
 
 func crumble() -> void:
 	for k in _live_points():
-		Sim.spill_px(pts[k], SandWorld.M_ASH, int(CORPSE.ash_cells / 5.0), Vector2(0, -0.3))
+		Sim.spill_px(pts[k] + Vector2(0, -4), SandWorld.M_ASH, int(CORPSE.ash_cells / 5.0), Vector2(0, -0.8))
 	queue_free()
