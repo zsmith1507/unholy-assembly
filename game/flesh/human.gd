@@ -20,7 +20,10 @@ const HUMAN := {
 	"flee_fear": 0.55, ## above this they run (unless ordered to attack)
 	"ordered_attack_breaks": 0.9, ## even an ordered attack breaks into flight at this fear
 	"brave_fear": 0.3, ## a farmer this calm goes at the thing with his pitchfork
-	"brace": 0.6, ## how much a calm human resists Harvest (0 none, 1 immovable)
+	"brace": 0.85, ## how much a calm human resists Harvest (0 none, 1 immovable); terror melts it
+	"drag_keep": 0.85, ## share of Harvest's drag kept per tick (their feet find the ground again)
+	"calm_fear": 0.25, ## once running, they keep running until fear falls below this
+	"threat_memory": 3.0, ## seconds a threat they can no longer see still counts (it is behind them as they run)
 	"attack_range": 22.0,
 	"attack_damage": 4.0, ## a pitchfork poke; they are not soldiers
 	"attack_cooldown": 1.2,
@@ -66,6 +69,9 @@ var _think := 0.0
 var _stuck := 0.0
 var _idle_ticks := 0
 var _fled_from := Vector2.ZERO
+var _fleeing := false
+var _drag_x := 0.0 ## sideways speed from Harvest's pull, px per tick
+var _threat_left := 0.0 ## seconds the last threat is still remembered
 
 
 func _init() -> void:
@@ -149,8 +155,15 @@ func _physics_process(delta: float) -> void:
 	if _threat != null:
 		fear = minf(1.0, fear + HUMAN.fear_gain * delta)
 		_fled_from = _threat.global_position
+		_threat_left = HUMAN.threat_memory
 	else:
-		fear = maxf(0.0, fear - HUMAN.fear_decay * delta)
+		_threat_left = maxf(0.0, _threat_left - delta)
+		if _threat_left <= 0.0:
+			fear = maxf(0.0, fear - HUMAN.fear_decay * delta)
+	if fear >= HUMAN.flee_fear:
+		_fleeing = true
+	elif fear < HUMAN.calm_fear:
+		_fleeing = false
 	var speed: float = HUMAN.walk_speed
 	var goal := global_position
 	_aim = Vector2.ZERO
@@ -177,7 +190,10 @@ func _physics_process(delta: float) -> void:
 	var moving := absf(goal.x - global_position.x) > 4.0
 	at_home = m == &"home" and not moving and home_rect.has_area() and home_rect.grow(8.0).has_point(global_position + Vector2(0, -4))
 	var dir := signf(goal.x - global_position.x) if moving else 0.0
-	velocity.x = dir * speed
+	velocity.x = dir * speed + _drag_x
+	_drag_x *= HUMAN.drag_keep
+	if absf(_drag_x) < 0.01:
+		_drag_x = 0.0
 	if dir != 0.0:
 		facing = int(dir)
 	elif _threat != null:
@@ -205,7 +221,7 @@ func _physics_process(delta: float) -> void:
 func current_mode() -> StringName:
 	if mode == &"attack":
 		return &"flee" if fear >= HUMAN.ordered_attack_breaks else &"attack"
-	if mode == &"flee" or fear >= HUMAN.flee_fear:
+	if mode == &"flee" or _fleeing:
 		return &"flee"
 	if _threat != null and fear < HUMAN.brave_fear and kind == &"farmer":
 		return &"attack" # a brave farmer pokes first, asks questions later
@@ -346,7 +362,8 @@ func apply_pull(force: Vector2) -> void:
 	if dead:
 		return
 	var resist := clampf(brace * (1.0 - fear), 0.0, 0.95)
-	velocity += force * (1.0 - resist) * 0.5
+	_drag_x += force.x * (1.0 - resist)
+	velocity.y += force.y * (1.0 - resist)
 	fear = minf(1.0, fear + 0.01)
 
 
