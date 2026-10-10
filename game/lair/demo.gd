@@ -35,6 +35,8 @@ func _ready() -> void:
 	builder.place(&"stitching_table", Vector2(470, fy))
 	altar = builder.place(&"altar", Vector2(560, fy))
 	builder.place(&"spike_trap", Vector2(140, fy))
+	for s in get_tree().get_nodes_in_group(&"lair_structures"):
+		_label(s)
 	for i in 2:
 		var g := LairMinion.make(&"ghoul")
 		add_child(g)
@@ -56,3 +58,17 @@ func _physics_process(delta: float) -> void:
 		altar.interact(null)
 	if GameState.mana < 0.5:
 		GameState.add_mana(0.5)
+
+
+## Name tags over the buildings while the art is still placeholder blocks (demo only).
+func _label(s: Node2D) -> void:
+	var names := {&"heart": "Necrotic Heart", &"spike_trap": "Spike Trap"}
+	var text: String = names.get(s.kind, s.get("spec").get("name", String(s.kind)) if s.get("spec") is Dictionary else String(s.kind))
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", 8)
+	l.modulate = Color(0.8, 0.85, 0.8, 0.8)
+	l.position = Vector2(-40, -s.footprint.y - 14)
+	l.size = Vector2(80, 10)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	s.add_child(l)
