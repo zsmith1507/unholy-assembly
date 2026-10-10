@@ -2,6 +2,7 @@
 #include "tuning.h"
 
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/rect2i.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -20,22 +21,50 @@ void SandWorld::setup(int width, int height, int seed) {
 	ERR_FAIL_COND_MSG(width < 16 || height < 16, "SandWorld.setup: world must be at least 16x16 cells.");
 	w = width;
 	h = height;
+	n = w * h;
 	cw = (w + CHUNK - 1) / CHUNK;
 	chh = (h + CHUNK - 1) / CHUNK;
 	tick = 0;
 	rng = seed ? (uint32_t)seed : 0x9e3779b9u;
-	size_t n = (size_t)w * h;
-	mat.assign(n, EMPTY);
-	shade.resize(n);
-	for (size_t i = 0; i < n; i++) {
+	const size_t N = (size_t)n, C = (size_t)cw * chh;
+	mat.assign(N, EMPTY);
+	shade.resize(N);
+	for (size_t i = 0; i < N; i++) {
 		shade[i] = (uint8_t)(rnd_u() & 0xff);
 	}
-	life.assign(n, 0);
-	wear.assign(n, 0.0f);
-	stamp.assign(n, 0);
-	active.assign((size_t)cw * chh, 1);
-	active_next.assign((size_t)cw * chh, 1);
+	life.assign(N, 0);
+	stamp.assign(N, 0);
+	vy.assign(N, 0);
+	vx.assign(N, 0);
+	fvx.assign(N, 0.0f);
+	fvy.assign(N, 0.0f);
+	plg.assign(N, 0);
+	mov.assign(N, 0);
+	burn.assign(N, 0);
+	body_of.assign(N, 0);
+	st_t.assign(N, 0);
+	st_i.assign(N, 0);
+	st_l.assign(N, 0);
+	mx_t.assign(N, 0);
+	mx_a.assign(N, 0);
+	heat.assign(N, 0.0f);
+	heat2.assign(N, 0.0f);
+	wear.assign(N, 0.0f);
+	fill_mark.assign(N, 0);
+	fill_stamp = 1;
+	region_buf.assign(N, 0);
+	stack_buf.assign(N, 0);
+	active.assign(C, 1);
+	active_next.assign(C, 1);
+	hot.assign(C, 0);
+	zone.assign(C, 0);
+	has_liquid.assign(C, 0);
+	has_stain.assign(C, 0);
 	particles.clear();
+	bodies.clear();
+	collapse_seeds.clear();
+	crush_events = Array();
+	next_body = 1;
 }
 
 void SandWorld::wake_at(int x, int y) {
@@ -85,16 +114,6 @@ int SandWorld::get_mat(int x, int y) const {
 		return BEDROCK;
 	}
 	return mat[idx(x, y)];
-}
-
-void SandWorld::put(int i, int m) {
-	mat[i] = (uint8_t)m;
-	shade[i] = (uint8_t)(rnd_u() & 0xff);
-	wear[i] = 0.0f;
-	const MatDef &d = mat_def(m);
-	life[i] = d.life_max ? (uint16_t)(d.life_min + (rnd_u() % (uint32_t)(d.life_max - d.life_min + 1))) : 0;
-	stamp[i] = (uint32_t)tick;
-	wake_at(i % w, i / w);
 }
 
 void SandWorld::set_mat(int x, int y, int m) {
@@ -214,323 +233,77 @@ int SandWorld::surface_y(int x, int from_y) const {
 	return h;
 }
 
-// ---------------------------------------------------------------- simulation
+// ---------------------------------------------------------------- spells and damage
 
-bool SandWorld::can_displace(int m, int target) const {
-	const MatDef &t = mat_def(target);
-	if (t.kind == K_EMPTY || t.kind == K_GAS || t.kind == K_FIRE) {
-		return true;
-	}
-	if (t.kind == K_LIQUID) {
-		return mat_def(m).density > t.density;
-	}
-	return false;
-}
-
-void SandWorld::swap_cells(int a, int b) {
-	std::swap(mat[a], mat[b]);
-	std::swap(shade[a], shade[b]);
-	std::swap(life[a], life[b]);
-	std::swap(wear[a], wear[b]);
-	stamp[a] = stamp[b] = (uint32_t)tick;
-	wake_at(a % w, a / w);
-	wake_at(b % w, b / w);
-}
-
-void SandWorld::update_powder(int x, int y, int i, bool lf) {
-	if (y + 1 >= h) {
+void SandWorld::spill(int x, int y, int m, int count, float svx, float svy) {
+	if (m <= 0 || m >= MAT_COUNT || !in_bounds(x, y)) {
 		return;
 	}
-	int below = i + w;
-	if (can_displace(mat[i], mat[below])) {
-		// sinking through liquid is slower than falling through air
-		if (mat_def(mat[below]).kind == K_LIQUID && rnd() < 0.5f) {
-			wake_at(x, y);
-			return;
-		}
-		swap_cells(i, below);
+	Kind k = md(m).kind;
+	if (k != K_LIQUID && k != K_POWDER) {
 		return;
 	}
-	// FRIC: a grain on a slope may come to rest; SLUMP: sluggish stuff (flesh, mud) only moves some ticks
-	const MatDef &pd = mat_def(mat[i]);
-	if (rnd() < pd.fric || rnd() > pd.slump) {
-		if (rnd() < 0.5f) {
-			wake_at(x, y); // stay awake a little so a resting grain can still be knocked loose
-		}
-		return;
-	}
-	int d1 = lf ? -1 : 1;
-	for (int k = 0; k < 2; k++) {
-		int d = k == 0 ? d1 : -d1;
-		int nx = x + d;
-		if (nx < 0 || nx >= w) {
-			continue;
-		}
-		int side = i + d, diag = below + d;
-		if (can_displace(mat[i], mat[diag]) && can_displace(mat[i], mat[side])) {
-			swap_cells(i, diag);
-			return;
-		}
-	}
-}
-
-void SandWorld::update_liquid(int x, int y, int i, bool lf) {
-	const MatDef &d = mat_def(mat[i]);
-	if (d.viscosity > 0 && rnd() < d.viscosity) {
-		wake_at(x, y);
-		return;
-	}
-	if (y + 1 < h) {
-		int below = i + w;
-		const MatDef &b = mat_def(mat[below]);
-		// ABSORB: soil drinks liquid that sits on it (stone and bone hold it). Grave dirt soaked in blood or water turns to mud.
-		if (b.absorb > 0 && rnd() < b.absorb) {
-			if (mat[below] == DIRT && (mat[i] == BLOOD || mat[i] == HOLY) && rnd() < tune::SOIL.mud) {
-				put(below, MUD);
-			}
-			put(i, EMPTY);
-			return;
-		}
-		if (b.kind == K_EMPTY || b.kind == K_GAS || b.kind == K_FIRE) {
-			swap_cells(i, below);
-			return;
-		}
-		if (b.kind == K_LIQUID && d.density > b.density + 0.01f && rnd() < 0.3f) {
-			swap_cells(i, below);
-			return;
-		}
-		int d1 = lf ? -1 : 1;
-		for (int k = 0; k < 2; k++) {
-			int dir = k == 0 ? d1 : -d1;
-			int nx = x + dir;
-			if (nx < 0 || nx >= w) {
-				continue;
-			}
-			Kind dk = mat_def(mat[below + dir]).kind;
-			if (dk == K_EMPTY || dk == K_GAS) {
-				swap_cells(i, below + dir);
-				return;
-			}
-		}
-	}
-	// spread sideways up to `dispersion` cells
-	int dir = lf ? -1 : 1;
-	for (int k = 0; k < 2; k++, dir = -dir) {
-		int best = -1;
-		for (int s = 1; s <= d.dispersion; s++) {
-			int nx = x + dir * s;
-			if (nx < 0 || nx >= w) {
-				break;
-			}
-			Kind nk = mat_def(mat[idx(nx, y)]).kind;
-			if (nk != K_EMPTY && nk != K_GAS) {
-				break;
-			}
-			best = idx(nx, y);
-			// stop at a drop so liquid pours over ledges instead of skating across
-			if (y + 1 < h && mat_def(mat[idx(nx, y + 1)]).kind == K_EMPTY) {
-				break;
-			}
-		}
-		if (best >= 0) {
-			swap_cells(i, best);
-			return;
-		}
-	}
-}
-
-void SandWorld::update_gas(int x, int y, int i, bool lf) {
-	if (life[i] > 0) {
-		life[i]--;
-	}
-	wake_at(x, y);
-	if (life[i] == 0) {
-		put(i, EMPTY);
-		return;
-	}
-	int ny = y - 1;
-	int dx = (int)(rnd_u() % 3) - 1;
-	int nx = x + dx;
-	if (ny >= 0 && nx >= 0 && nx < w) {
-		int j = idx(nx, ny);
-		if (mat_def(mat[j]).kind == K_EMPTY) {
-			swap_cells(i, j);
-			return;
-		}
-	}
-	int sx = x + (lf ? -1 : 1);
-	if (sx >= 0 && sx < w && mat_def(mat[idx(sx, y)]).kind == K_EMPTY && rnd() < 0.5f) {
-		swap_cells(i, idx(sx, y));
-	}
-}
-
-void SandWorld::catch_fire(int j, int m) {
-	const MatDef &d = mat_def(m);
-	put(j, FIRE);
-	if (d.fuel1 > 0) {
-		// FIRE block: fuel is how many ticks this material burns; timber and flesh smoulder long and leave embers
-		life[j] = (uint16_t)(d.fuel0 + (rnd_u() % (uint32_t)(d.fuel1 - d.fuel0 + 1)));
-		shade[j] = (uint8_t)((shade[j] & ~1u) | (d.fuel0 >= 200 ? 1u : 0u));
-	} else {
-		shade[j] &= ~1u;
-	}
-}
-
-void SandWorld::update_fire(int x, int y, int i) {
-	wake_at(x, y);
-	// spread to flammable neighbours; water-like liquids put it out
-	static const int nx4[8] = { -1, 1, 0, 0, -1, 1, -1, 1 };
-	static const int ny4[8] = { 0, 0, -1, 1, -1, -1, 1, 1 };
-	for (int k = 0; k < 8; k++) {
-		int xx = x + nx4[k], yy = y + ny4[k];
-		if (!in_bounds(xx, yy)) {
-			continue;
-		}
-		int j = idx(xx, yy);
-		int m = mat[j];
-		const MatDef &d = mat_def(m);
-		if (m == BLOOD || m == HOLY) {
-			put(i, STEAM);
-			return;
-		}
-		if (d.fueled && rnd() < tune::CATCH_SCALE / ((1.0f + d.ign) * (1.0f + d.ign))) {
-			catch_fire(j, m);
-		}
-	}
-	if (life[i] > 0) {
-		life[i]--;
-	}
-	if (life[i] == 0) {
-		float r = rnd();
-		// long-burning fuel (timber, flesh) leaves embers behind; everything leaves some smoke and ash
-		bool long_burn = shade[i] & 1;
-		put(i, (long_burn && r < tune::EMBER_LEAVE) ? EMBER : (r < 0.35f ? SMOKE : (r < 0.42f ? ASH : EMPTY)));
-		return;
-	}
-	int up = i - w;
-	if (shade[i] & 1) {
-		// burning fuel stays put and throws short flames into the air above it
-		if (y > 0 && mat_def(mat[up]).kind == K_EMPTY && rnd() < tune::FUEL_FLAME) {
-			put(up, FIRE);
-			shade[up] &= ~1u;
-			life[up] = (uint16_t)(10 + rnd_u() % 20);
-		}
-		return;
-	}
-	// loose flames lick upward
-	if (y > 0 && rnd() < 0.3f && mat_def(mat[up]).kind == K_EMPTY) {
-		swap_cells(i, up);
-	}
-}
-
-void SandWorld::update_cell(int x, int y, bool lf) {
-	int i = idx(x, y);
-	if (stamp[i] == (uint32_t)tick) {
-		return;
-	}
-	switch (mat_def(mat[i]).kind) {
-		case K_POWDER:
-			update_powder(x, y, i, lf);
-			break;
-		case K_LIQUID:
-			update_liquid(x, y, i, lf);
-			break;
-		case K_GAS:
-			update_gas(x, y, i, lf);
-			break;
-		case K_FIRE:
-			update_fire(x, y, i);
-			break;
-		default:
-			break;
-	}
-}
-
-void SandWorld::step() {
-	if (w == 0) {
-		return;
-	}
-	tick++;
-	active.swap(active_next);
-	std::fill(active_next.begin(), active_next.end(), 0);
-	bool lf = (tick & 1) != 0;
-	for (int cy = chh - 1; cy >= 0; cy--) {
-		for (int cx = 0; cx < cw; cx++) {
-			if (!active[cy * cw + cx]) {
-				continue;
-			}
-			int x0 = cx * CHUNK, x1 = std::min(w, x0 + CHUNK);
-			int y0 = cy * CHUNK, y1 = std::min(h, y0 + CHUNK);
-			for (int y = y1 - 1; y >= y0; y--) {
-				if (lf) {
-					for (int x = x0; x < x1; x++) {
-						update_cell(x, y, (rnd_u() & 1) != 0);
-					}
-				} else {
-					for (int x = x1 - 1; x >= x0; x--) {
-						update_cell(x, y, (rnd_u() & 1) != 0);
-					}
-				}
-			}
-		}
-	}
-	step_particles();
-}
-
-// ---------------------------------------------------------------- particles (airborne grains)
-
-void SandWorld::spill(int x, int y, int m, int count, float vx, float vy) {
-	if (m <= 0 || m >= MAT_COUNT) {
-		return;
-	}
-	for (int k = 0; k < count && particles.size() < 8000; k++) {
+	for (int c = 0; c < count && (int)particles.size() < tune::PART.max; c++) {
 		Particle p;
 		p.x = x + 0.5f;
 		p.y = y + 0.5f;
-		p.vx = vx + (rnd() - 0.5f) * 1.2f;
-		p.vy = vy + (rnd() - 0.5f) * 1.2f;
+		p.vx = svx + (rnd() - 0.5f) * 1.2f;
+		p.vy = svy + (rnd() - 0.5f) * 1.2f;
 		p.mat = (uint8_t)m;
+		p.shade = (uint8_t)(rnd_u() & 0xff);
+		p.mx_t = 0;
+		p.mx_a = 0;
 		particles.push_back(p);
 	}
+	wake_at(x, y);
 }
 
-void SandWorld::step_particles() {
-	size_t keep = 0;
-	for (size_t k = 0; k < particles.size(); k++) {
-		Particle p = particles[k];
-		p.vy += 0.25f;
-		float steps = std::max(std::fabs(p.vx), std::fabs(p.vy));
-		int n = std::max(1, (int)std::ceil(steps));
-		float sx = p.vx / n, sy = p.vy / n;
-		bool landed = false;
-		int px = (int)p.x, py = (int)p.y;
-		for (int s = 0; s < n; s++) {
-			float nx = p.x + sx, ny = p.y + sy;
-			int ix = (int)std::floor(nx), iy = (int)std::floor(ny);
-			if (!in_bounds(ix, iy) || !is_empty(ix, iy)) {
-				landed = true;
-				break;
-			}
-			p.x = nx;
-			p.y = ny;
-			px = ix;
-			py = iy;
+// What digging leaves behind (prototype crumble): most dug ground vanishes, a little falls as loose grains; burning
+// timber falls as an ember; flesh doesn't crumble, it bursts into blood and fat.
+void SandWorld::crumble(int i, int t) {
+	const tune::CrumbleTune &C = tune::CRUMBLE;
+	float r = rnd();
+	bool was_burning = burn[i] != 0;
+	if (was_burning && (t == WOOD || t == PLANK || t == FLESH || t == GIBS)) {
+		put(i, EMBER);
+		burn[i] = (uint16_t)(120 + (int)(rnd() * 200));
+	} else if (t == EARTH || t == GRASS) {
+		put(i, r < C.earth_dirt ? DIRT : EMPTY);
+	} else if (t == STONE) {
+		put(i, r < C.stone_rubble ? RUBBLE : EMPTY);
+	} else if (t == BRICK) {
+		put(i, r < C.brick_rubble ? RUBBLE : EMPTY);
+	} else if (t == BONE) {
+		put(i, r < C.bone_shards ? BONEBIT : EMPTY);
+	} else if (t == WOOD || t == PLANK) {
+		put(i, r < C.wood_ash ? ASH : EMPTY);
+	} else if (t == CLAY) {
+		put(i, r < C.clay_dirt ? DIRT : EMPTY);
+	} else if (t == FLESH || t == GIBS) {
+		if (r < tune::DIG.flesh_blood) {
+			put(i, BLOOD);
+			fvx[i] = (rnd() - 0.5f) * 2.0f;
+			fvy[i] = 0;
+		} else if (r < tune::DIG.flesh_blood + tune::DIG.flesh_tallow) {
+			put(i, TALLOW);
+		} else {
+			put(i, EMPTY);
 		}
-		if (landed) {
-			if (in_bounds(px, py) && is_empty(px, py)) {
-				put(idx(px, py), p.mat);
+		int x = i % w, y = i / w;
+		for (int k = 0; k < 3; k++) {
+			int nx = x + (int)(rnd() * 3) - 1, ny = y + (int)(rnd() * 3) - 1;
+			if (in_bounds(nx, ny) && (nx != x || ny != y)) {
+				splatter(idx(nx, ny), BLOOD, (float)(nx - x), (float)(ny - y), 3);
 			}
-			continue;
 		}
-		particles[keep++] = p;
+	} else {
+		put(i, EMPTY);
 	}
-	particles.resize(keep);
 }
-
-// ---------------------------------------------------------------- spells and damage
 
 Dictionary SandWorld::dig(int cx, int cy, int r, float power) {
 	int removed[MAT_COUNT] = { 0 };
+	r = std::max(0, r);
 	for (int yy = cy - r; yy <= cy + r; yy++) {
 		for (int xx = cx - r; xx <= cx + r; xx++) {
 			if (!in_bounds(xx, yy)) {
@@ -542,18 +315,20 @@ Dictionary SandWorld::dig(int cx, int cy, int r, float power) {
 				continue;
 			}
 			int i = idx(xx, yy);
-			const MatDef &d = mat_def(mat[i]);
-			if (d.kind != K_STATIC && d.kind != K_POWDER) {
-				continue;
+			int t = mat[i];
+			const MatDef &d = md(t);
+			if ((d.kind != K_STATIC && d.kind != K_POWDER) || d.hardness <= 0) {
+				continue; // air, liquids, bedrock
 			}
-			if (d.hardness <= 0) {
-				continue; // bedrock
-			}
-			float falloff = 1.0f - 0.6f * std::sqrt(d2) / (float)std::max(1, r);
+			float falloff = 1.0f - tune::DIG.falloff * std::sqrt(d2) / (float)std::max(1, r);
 			wear[i] += power * falloff;
 			if (wear[i] >= d.hardness) {
-				removed[mat[i]]++;
-				put(i, EMPTY);
+				removed[t]++;
+				bool was_static = d.kind == K_STATIC;
+				crumble(i, t);
+				if (was_static) {
+					seed_collapse(i); // the cut may have freed a piece of ground
+				}
 			}
 		}
 	}
@@ -567,28 +342,34 @@ Dictionary SandWorld::dig(int cx, int cy, int r, float power) {
 }
 
 void SandWorld::ignite(int x, int y, int r) {
+	r = std::max(0, r);
 	for (int yy = y - r; yy <= y + r; yy++) {
 		for (int xx = x - r; xx <= x + r; xx++) {
 			if (!in_bounds(xx, yy)) {
 				continue;
 			}
-			int i = idx(xx, yy);
-			const MatDef &d = mat_def(mat[i]);
-			if (d.fueled || d.kind == K_EMPTY) {
-				if (d.fueled) {
-					catch_fire(i, mat[i]);
-					continue;
-				}
-				if (d.kind == K_EMPTY && rnd() > 0.3f) {
-					continue;
-				}
-				put(i, FIRE);
+			int dx = xx - x, dy = yy - y;
+			if (dx * dx + dy * dy > r * r) {
+				continue;
 			}
+			int i = idx(xx, yy);
+			const MatDef &d = md(mat[i]);
+			if (d.fueled) {
+				if (mat[i] != EMBER && air_reach(i, mat[i])) {
+					start_burn(i);
+				}
+			} else if (mat[i] == EMPTY && rnd() < 0.3f) {
+				set_flame(i, 10, 30);
+			}
+			add_heat_i(i, 6.0f);
 		}
 	}
+	wake_at(x, y);
 }
 
 void SandWorld::explode(int cx, int cy, int r, float force) {
+	const tune::BlastTune &B = tune::BLAST;
+	r = std::max(1, r);
 	for (int yy = cy - r; yy <= cy + r; yy++) {
 		for (int xx = cx - r; xx <= cx + r; xx++) {
 			if (!in_bounds(xx, yy)) {
@@ -600,21 +381,368 @@ void SandWorld::explode(int cx, int cy, int r, float force) {
 				continue;
 			}
 			int i = idx(xx, yy);
-			int m = mat[i];
-			const MatDef &d = mat_def(m);
-			if (d.kind == K_EMPTY || d.hardness <= 0 && d.kind == K_STATIC) {
+			int t = mat[i];
+			const MatDef &d = md(t);
+			float k = force / std::max(1.0f, dist);
+			if (d.kind == K_LIQUID) { // liquids are thrown, not destroyed
+				launch(i, dx * k * B.liquid_speed * 0.25f, dy * k * B.liquid_speed * 0.25f - 1.0f);
 				continue;
 			}
-			if (d.hardness > force * (1.0f - dist / r) * 4.0f) {
+			if (d.kind == K_EMPTY || d.kind == K_GAS) {
+				if (dist > r * 0.75f && rnd() < B.rim_fire) {
+					set_flame(i, 8, 24);
+				} else if (rnd() < B.smoke * 0.5f) {
+					put(i, SMOKE);
+				}
 				continue;
 			}
-			// some of it flies as debris, the rest is vaporised
-			if (rnd() < 0.25f) {
-				int debris = (d.kind == K_STATIC) ? ((m == BONE) ? BONEBIT : RUBBLE) : m;
-				float k = force * 0.6f / std::max(1.0f, dist);
-				spill(xx, yy, debris, 1, dx * k, dy * k - 1.5f);
+			if (d.kind == K_FIRE || d.hardness <= 0) {
+				continue; // bedrock
 			}
-			put(i, (dist > r * 0.75f && rnd() < 0.3f) ? FIRE : (rnd() < 0.2f ? SMOKE : EMPTY));
+			if (d.hardness > force * B.carve * (1.0f - dist / r)) {
+				continue;
+			}
+			bool was_static = d.kind == K_STATIC;
+			if (rnd() < B.debris) { // some of it flies as debris
+				int deb = was_static ? (d.loose ? d.loose : (t == WOOD || t == PLANK ? EMBER : RUBBLE)) : t;
+				put(i, deb);
+				if (deb == EMBER) {
+					burn[i] = (uint16_t)(150 + (int)(rnd() * 200));
+				}
+				float sp = force * B.debris_speed / std::max(1.0f, dist);
+				if (launch(i, dx * sp * 0.25f, dy * sp * 0.25f - 1.5f)) {
+					if (was_static) {
+						seed_collapse(i);
+					}
+					continue;
+				}
+			}
+			put(i, (dist > r * 0.75f && rnd() < B.rim_fire) ? FIRE : (rnd() < B.smoke ? SMOKE : EMPTY));
+			if (was_static) {
+				seed_collapse(i);
+			}
+		}
+	}
+	// the blast's heat: sets off anything flammable near the centre
+	int hr = std::max(1, r / 2);
+	for (int yy = cy - hr; yy <= cy + hr; yy++) {
+		for (int xx = cx - hr; xx <= cx + hr; xx++) {
+			if (in_bounds(xx, yy)) {
+				add_heat_i(idx(xx, yy), B.heat * force / 10.0f);
+			}
+		}
+	}
+	wake_rect(cx - r, cy - r, r * 2 + 1, r * 2 + 1);
+}
+
+float SandWorld::get_heat(int x, int y) const {
+	return in_bounds(x, y) ? heat[idx(x, y)] : 0.0f;
+}
+
+void SandWorld::add_heat(int cx, int cy, int r, float amount) {
+	r = std::max(0, r);
+	for (int yy = cy - r; yy <= cy + r; yy++) {
+		for (int xx = cx - r; xx <= cx + r; xx++) {
+			int dx = xx - cx, dy = yy - cy;
+			if (in_bounds(xx, yy) && dx * dx + dy * dy <= r * r) {
+				add_heat_i(idx(xx, yy), amount);
+			}
+		}
+	}
+	wake_at(cx, cy);
+}
+
+int SandWorld::get_stain(int x, int y) const {
+	if (!in_bounds(x, y)) {
+		return 0;
+	}
+	int i = idx(x, y);
+	return st_l[i] ? st_t[i] : 0;
+}
+
+bool SandWorld::is_burning(int x, int y) const {
+	return in_bounds(x, y) && burn[idx(x, y)] != 0;
+}
+
+// ---------------------------------------------------------------- collapsing ground
+// Whenever ground is dug, burned or blown away, the solid ground around the cut is flood-filled. A patch that no
+// longer connects to bedrock, the sides or the bottom of the world breaks off: crumbs fall apart into loose grains,
+// bigger pieces fall as one chunk that keeps its shape, push through liquid, report crush events, and shatter on a
+// hard landing. Nothing caves in by itself: only cuts seed the check.
+
+static inline bool holds_together(int t) {
+	return md(t).kind == K_STATIC && t != BEDROCK && t != SPOUT;
+}
+
+int SandWorld::flood_region(int start) {
+	int sp = 0, cnt = 0;
+	stack_buf[sp++] = start;
+	fill_mark[start] = fill_stamp;
+	const uint16_t sb = body_of[start];
+	while (sp) {
+		int q = stack_buf[--sp];
+		if (cnt >= tune::COLLAPSE.maxRegion) {
+			return -1; // too big to be loose: part of the world
+		}
+		region_buf[cnt++] = q;
+		int x = q % w, y = q / w;
+		if (x == 0 || x == w - 1 || y == h - 1) {
+			return -1; // the edge of the world holds it up
+		}
+		int nb4[4] = { q - w, q + w, q - 1, q + 1 };
+		for (int k = 0; k < 4; k++) {
+			int nb = nb4[k];
+			if (nb < 0 || nb >= n) {
+				continue;
+			}
+			int tn = mat[nb];
+			if (tn == BEDROCK || tn == SPOUT) {
+				return -1; // anchored
+			}
+			if (holds_together(tn) && fill_mark[nb] != fill_stamp && (!body_of[nb] || body_of[nb] == sb)) {
+				fill_mark[nb] = fill_stamp;
+				stack_buf[sp++] = nb;
+			}
+		}
+	}
+	return cnt;
+}
+
+void SandWorld::process_collapse() {
+	if (collapse_seeds.empty()) {
+		return;
+	}
+	fill_stamp = fill_stamp >= 0xfffffffeu ? 1 : fill_stamp + 1;
+	if (fill_stamp == 1) {
+		std::fill(fill_mark.begin(), fill_mark.end(), 0);
+	}
+	int take = std::min((int)collapse_seeds.size(), tune::COLLAPSE.seeds_per_check);
+	std::vector<int> seeds(collapse_seeds.begin(), collapse_seeds.begin() + take);
+	collapse_seeds.erase(collapse_seeds.begin(), collapse_seeds.begin() + take);
+	for (int sd : seeds) {
+		if (sd < 0 || sd >= n) {
+			continue;
+		}
+		int sx = sd % w;
+		int nb4[5] = { sd, sd - w, sd + w, sx > 0 ? sd - 1 : -1, sx < w - 1 ? sd + 1 : -1 };
+		for (int j : nb4) {
+			if (j < 0 || j >= n || !holds_together(mat[j]) || body_of[j] || fill_mark[j] == fill_stamp) {
+				continue;
+			}
+			int cnt = flood_region(j);
+			if (cnt > 0) {
+				break_loose(cnt);
+			}
+		}
+	}
+}
+
+void SandWorld::break_loose(int count) {
+	if (count <= tune::COLLAPSE.crumb) { // a crumb: it just falls apart
+		for (int k = 0; k < count; k++) {
+			int q = region_buf[k];
+			int lt = md(mat[q]).loose;
+			if (lt) {
+				uint8_t sh = shade[q];
+				put(q, lt);
+				shade[q] = sh;
+			}
+		}
+		int solid_left = 0;
+		for (int k = 0; k < count; k++) {
+			solid_left += holds_together(mat[region_buf[k]]) ? 1 : 0;
+		}
+		if (!solid_left) {
+			return;
+		}
+	}
+	if ((int)bodies.size() >= tune::COLLAPSE.maxBodies) {
+		return;
+	}
+	Body b;
+	b.id = next_body;
+	next_body = next_body >= 65535 ? 1 : next_body + 1;
+	b.cells.reserve(count);
+	for (int k = 0; k < count; k++) {
+		int q = region_buf[k];
+		if (holds_together(mat[q])) {
+			body_of[q] = b.id;
+			b.cells.push_back(q);
+		}
+	}
+	if (!b.cells.empty()) {
+		wake_i(b.cells[0]);
+		bodies.push_back(std::move(b));
+	}
+}
+
+void SandWorld::push_crush(const Body &b, bool landed) {
+	if (b.cells.empty()) {
+		return;
+	}
+	int x0 = w, y0 = h, x1 = -1, y1 = -1;
+	for (int q : b.cells) {
+		int x = q % w, y = q / w;
+		x0 = std::min(x0, x);
+		x1 = std::max(x1, x);
+		y0 = std::min(y0, y);
+		y1 = std::max(y1, y);
+	}
+	Dictionary e;
+	e["rect"] = Rect2i(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+	e["force"] = b.vy * (float)b.cells.size() * tune::CRUSH.force_per;
+	e["landed"] = landed;
+	e["cells"] = (int)b.cells.size();
+	e["speed"] = b.vy;
+	if (crush_events.size() >= tune::CRUSH.max_events) {
+		crush_events.pop_front();
+	}
+	crush_events.push_back(e);
+}
+
+void SandWorld::land(Body &b) {
+	const float v = b.vy;
+	const float shatter = tune::COLLAPSE.shatter;
+	if (v >= shatter) { // a hard landing: the leading edge shatters, and some of it bounces up as loose grains
+		float chance = std::min(0.85f, (v - shatter + 0.6f) * 0.22f);
+		for (int q : b.cells) {
+			if (body_of[q] != b.id || (q + w < n && body_of[q + w] == b.id) || rnd() > chance) {
+				continue;
+			}
+			int t = mat[q];
+			int lt = md(t).loose ? md(t).loose : ((t == WOOD || t == PLANK) ? ASH : 0);
+			if (!lt) {
+				continue;
+			}
+			uint8_t sh = shade[q];
+			put(q, lt);
+			shade[q] = sh;
+			if (rnd() < 0.3f && q >= w && is_open_i(q - w)) {
+				launch(q, (rnd() - 0.5f) * 1.6f, -0.4f - rnd() * 0.9f);
+			}
+		}
+	}
+	push_crush(b, true);
+	for (int q : b.cells) {
+		if (body_of[q] == b.id) {
+			body_of[q] = 0;
+			mov[q] = 1;
+			if (q < n - w) {
+				mov[q + w] = 1;
+			}
+			wake_i(q);
+		}
+	}
+}
+
+// A chunk moves column by column: in each column it spans, everything from its top cell to its bottom cell shifts
+// down together, so whatever is inside it (a coffin's occupant, a pocket of blood) rides along.
+void SandWorld::step_bodies() {
+	struct Col {
+		int x, lo, hi;
+	};
+	std::vector<Col> cols;
+	std::vector<int> col_of;
+	for (int k = (int)bodies.size() - 1; k >= 0; k--) {
+		Body &b = bodies[k];
+		b.cells.erase(std::remove_if(b.cells.begin(), b.cells.end(), [&](int q) { return body_of[q] != b.id; }), b.cells.end());
+		if (b.cells.empty()) {
+			bodies.erase(bodies.begin() + k);
+			continue;
+		}
+		b.vy = std::min((float)tune::LIQ.maxv, b.vy + tune::COLLAPSE.gravity);
+		b.acc += b.vy;
+		int steps = (int)std::floor(b.acc);
+		b.acc -= steps;
+		bool done = false;
+		int moved = 0;
+		if (steps > 0) {
+			int xmin = w, xmax = -1;
+			for (int q : b.cells) {
+				xmin = std::min(xmin, q % w);
+				xmax = std::max(xmax, q % w);
+			}
+			col_of.assign(xmax - xmin + 1, -1);
+			cols.clear();
+			for (int q : b.cells) {
+				int x = q % w, y = q / w;
+				int &c = col_of[x - xmin];
+				if (c < 0) {
+					c = (int)cols.size();
+					cols.push_back({ x, y, y });
+				} else {
+					cols[c].lo = std::min(cols[c].lo, y);
+					cols[c].hi = std::max(cols[c].hi, y);
+				}
+			}
+		}
+		while (steps-- > 0) {
+			// can this chunk move down one cell? 1 = yes, 0 = it has landed, 2 = waiting on another falling chunk
+			int can = 1;
+			for (const Col &c : cols) {
+				for (int y = c.lo + 1; y < c.hi && can == 1; y++) { // something of the world caught inside it: hooked on
+					int q = y * w + c.x;
+					if (body_of[q] == b.id) {
+						continue;
+					}
+					if (body_of[q]) {
+						can = 2;
+					} else if (md(mat[q]).kind == K_STATIC) {
+						can = 0;
+					}
+				}
+				if (can != 1) {
+					break;
+				}
+				int below = (c.hi + 1) * w + c.x;
+				if (c.hi + 1 >= h) {
+					can = 0;
+					break;
+				}
+				if (body_of[below]) {
+					can = 2;
+					break;
+				}
+				if (!(is_open_i(below) || md(mat[below]).kind == K_LIQUID)) {
+					can = 0;
+					break;
+				}
+			}
+			if (can == 1) {
+				for (Col &c : cols) {
+					for (int y = c.hi; y >= c.lo; y--) {
+						swap_cells(y * w + c.x, (y + 1) * w + c.x);
+					}
+					c.lo++;
+					c.hi++;
+				}
+				for (int &q : b.cells) {
+					q += w;
+				}
+				b.fell++;
+				moved++;
+				continue;
+			}
+			if (can == 2) {
+				b.vy = std::min(b.vy, 1.0f);
+				b.acc = 0;
+				if (++b.wait > 240) {
+					land(b);
+					done = true;
+				}
+				break;
+			}
+			land(b);
+			done = true;
+			break;
+		}
+		if (done) {
+			bodies.erase(bodies.begin() + k);
+		} else {
+			wake_i(b.cells[0]);
+			if (moved) {
+				push_crush(b, false);
+			}
 		}
 	}
 }
@@ -626,6 +754,43 @@ Array SandWorld::take_crush_events() {
 }
 
 // ---------------------------------------------------------------- rendering
+// The prototype's look: each cell's colour (with stains, liquid mixes, burning glow and dig wear blended in), then
+// shading from its neighbours: ground gets a lit rim under open air, shadowed undersides and darkens with depth;
+// liquids get a bright surface line and darken toward the bottom of a pool (SHADE in tuning.h).
+
+namespace {
+const uint8_t FIRE_PAL[6][3] = { { 255, 241, 184 }, { 255, 209, 102 }, { 244, 160, 58 }, { 224, 96, 42 }, { 168, 51, 31 }, { 90, 29, 20 } };
+const uint8_t G_FIRE[6][3] = { { 255, 190, 90 }, { 255, 150, 50 }, { 230, 100, 30 }, { 170, 60, 20 }, { 90, 25, 10 }, { 30, 8, 4 } };
+const uint8_t BURN_RGB[3][3] = { { 255, 150, 50 }, { 230, 100, 30 }, { 170, 60, 20 } };
+const uint8_t G_ICHOR[3] = { 34, 80, 6 }, G_ICHOR_DIM[3] = { 12, 30, 2 }, G_HOLY[3] = { 6, 16, 28 }, G_MIASMA[3] = { 26, 34, 4 };
+
+// a cheap per-cell, per-tick random number for flicker (rendering never touches the simulation's random stream)
+inline uint32_t flick(uint32_t i, uint32_t t) {
+	uint32_t x = i * 0x9E3779B1u ^ (t * 0x85EBCA77u);
+	x ^= x >> 15;
+	x *= 0x2C1B3C6Du;
+	x ^= x >> 12;
+	return x;
+}
+inline void rgb_of(uint32_t c, float &r, float &g, float &b) {
+	r = (float)((c >> 16) & 0xff);
+	g = (float)((c >> 8) & 0xff);
+	b = (float)(c & 0xff);
+}
+inline uint8_t clamp8(float v) {
+	return v <= 0 ? 0 : (v >= 255 ? 255 : (uint8_t)v);
+}
+inline int fire_idx(int l, float hv, uint32_t f) {
+	int k = l > 22 ? 1 : l > 12 ? 2 : l > 6 ? 3 : l > 2 ? 4 : 5;
+	if (hv > 40 && k > 0) {
+		k--; // big hot fires burn whiter
+	}
+	if ((f & 1023) < 358) {
+		k = std::min(5, k + 1);
+	}
+	return k;
+}
+} // namespace
 
 void SandWorld::render_region(const Ref<Image> &image, int x0, int y0) {
 	ERR_FAIL_COND(image.is_null());
@@ -633,49 +798,139 @@ void SandWorld::render_region(const Ref<Image> &image, int x0, int y0) {
 	PackedByteArray buf;
 	buf.resize((int64_t)iw * ih * 4);
 	uint8_t *p = buf.ptrw();
-	for (int yy = 0; yy < ih; yy++) {
-		int wy = y0 + yy;
-		for (int xx = 0; xx < iw; xx++) {
-			int wx = x0 + xx;
-			uint8_t *o = p + ((size_t)yy * iw + xx) * 4;
-			if (!in_bounds(wx, wy)) {
-				o[0] = o[1] = o[2] = 0;
-				o[3] = 0;
-				continue;
+	memset(p, 0, (size_t)iw * ih * 4);
+	if (w == 0) {
+		image->set_data(iw, ih, false, Image::FORMAT_RGBA8, buf);
+		return;
+	}
+	const tune::ShadeTune &S = tune::SHADE;
+	// per-column run counters for shading, primed from a few rows above the region
+	std::vector<int16_t> sr(iw, 0), lr(iw, 0);
+	const int look = 16;
+	for (int xx = 0; xx < iw; xx++) {
+		int wx = x0 + xx;
+		if (wx < 0 || wx >= w) {
+			continue;
+		}
+		for (int wy = std::max(0, y0 - look); wy < std::min(h, y0); wy++) {
+			int i = idx(wx, wy), t = mat[i];
+			Kind k = md(t).kind;
+			if ((k == K_STATIC || k == K_POWDER) && !burn[i] && t != EMBER) {
+				sr[xx]++;
+				lr[xx] = 0;
+			} else if (k == K_LIQUID) {
+				lr[xx]++;
+				sr[xx] = 0;
+			} else {
+				sr[xx] = lr[xx] = 0;
 			}
-			int i = idx(wx, wy);
-			int m = mat[i];
-			const MatDef &d = mat_def(m);
-			if (d.kind == K_EMPTY) {
-				o[0] = o[1] = o[2] = o[3] = 0;
-				continue;
-			}
-			uint32_t c = d.colors[shade[i] >> 6];
-			int r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
-			if (d.kind == K_FIRE) {
-				// flicker
-				uint32_t fc = d.colors[(shade[i] + tick) >> 6 & 3];
-				r = (fc >> 16) & 0xff;
-				g = (fc >> 8) & 0xff;
-				b = fc & 0xff;
-			}
-			o[0] = (uint8_t)r;
-			o[1] = (uint8_t)g;
-			o[2] = (uint8_t)b;
-			o[3] = d.kind == K_GAS ? (uint8_t)std::min(150, 40 + life[i]) : 255;
 		}
 	}
-	// airborne grains
+	const uint32_t tk = (uint32_t)tick;
+	for (int yy = 0; yy < ih; yy++) {
+		int wy = y0 + yy;
+		if (wy < 0 || wy >= h) {
+			continue;
+		}
+		for (int xx = 0; xx < iw; xx++) {
+			int wx = x0 + xx;
+			if (wx < 0 || wx >= w) {
+				continue;
+			}
+			uint8_t *o = p + ((size_t)yy * iw + xx) * 4;
+			int i = idx(wx, wy), t = mat[i];
+			const MatDef &d = md(t);
+			Kind k = d.kind;
+			if (k == K_EMPTY) {
+				sr[xx] = lr[xx] = 0;
+				continue;
+			}
+			float r, g, b;
+			rgb_of(d.colors[shade[i] >> 6], r, g, b);
+			uint8_t alpha = 255;
+			float f = 1.0f;
+			if (k == K_GAS) {
+				rgb_of(d.colors[0], r, g, b);
+				alpha = clamp8(255.0f * d.gas_alpha * std::min(1.0f, life[i] / 40.0f));
+				sr[xx] = lr[xx] = 0;
+			} else if (k == K_FIRE) {
+				const uint8_t *c = FIRE_PAL[fire_idx(life[i], heat[i], flick(i, tk))];
+				r = c[0];
+				g = c[1];
+				b = c[2];
+				sr[xx] = lr[xx] = 0;
+			} else {
+				if (burn[i] || t == EMBER) { // burning: the material shows through a flickering glow
+					uint32_t fl = flick(i, tk);
+					const uint8_t *c = BURN_RGB[fl % 3];
+					float a = t == EMBER ? 0.55f + ((fl >> 8) & 255) / 255.0f * 0.35f : 0.35f + ((fl >> 8) & 255) / 255.0f * 0.4f;
+					r = r * (1 - a) + c[0] * a;
+					g = g * (1 - a) + c[1] * a;
+					b = b * (1 - a) + c[2] * a;
+				} else if (st_l[i]) { // a stain, coloured by its age
+					const MatDef &sd = md(st_t[i]);
+					int age = sd.st_ticks ? 63 - std::min(63, (int)(st_l[i] * 63 / sd.st_ticks)) : 63;
+					const uint8_t *lut = sd.st_lut[age];
+					float a = lut[3] / 255.0f * (st_i[i] / 255.0f);
+					r = r * (1 - a) + lut[0] * a;
+					g = g * (1 - a) + lut[1] * a;
+					b = b * (1 - a) + lut[2] * a;
+				} else if (mx_a[i]) { // two liquids mixed in one cell
+					float r2, g2, b2, a = mx_a[i] / 255.0f;
+					rgb_of(md(mx_t[i]).colors[shade[i] >> 6], r2, g2, b2);
+					r = r * (1 - a) + r2 * a;
+					g = g * (1 - a) + g2 * a;
+					b = b * (1 - a) + b2 * a;
+				}
+				if (wear[i] > 0 && d.hardness > 0) { // worn by digging: pale and cracked
+					float a = std::min(S.wear_max, wear[i] / d.hardness * 0.75f);
+					r = r * (1 - a) + 205 * a;
+					g = g * (1 - a) + 225 * a;
+					b = b * (1 - a) + 190 * a;
+				}
+				// shading
+				if ((k == K_STATIC || k == K_POWDER) && !burn[i] && t != EMBER) {
+					int s = ++sr[xx];
+					lr[xx] = 0;
+					f = s == 1 ? S.rim : s == 2 ? S.rim2 : 1 - std::min(S.deepMax, (s - 2) * S.deep);
+					if (wy < h - 1 && is_open_i(i + w)) {
+						f *= S.under;
+					} else if (s > 2 && ((wx > 0 && is_open_i(i - 1)) || (wx < w - 1 && is_open_i(i + 1)))) {
+						f *= S.side;
+					}
+				} else if (k == K_LIQUID) {
+					int s = ++lr[xx];
+					sr[xx] = 0;
+					f = (s == 1 && wy > 0 && is_open_i(i - w)) ? S.sheen : 1 - std::min(S.liqMax, (s - 1) * S.liqDeep);
+				} else {
+					sr[xx] = lr[xx] = 0;
+				}
+			}
+			o[0] = clamp8(r * f);
+			o[1] = clamp8(g * f);
+			o[2] = clamp8(b * f);
+			o[3] = alpha;
+		}
+	}
+	// airborne droplets and grains
 	for (const Particle &pt : particles) {
 		int xx = (int)pt.x - x0, yy = (int)pt.y - y0;
 		if (xx < 0 || yy < 0 || xx >= iw || yy >= ih) {
 			continue;
 		}
-		uint32_t c = mat_def(pt.mat).colors[0];
+		float r, g, b;
+		rgb_of(md(pt.mat).colors[pt.shade >> 6], r, g, b);
+		if (pt.mx_a) {
+			float r2, g2, b2, a = pt.mx_a / 255.0f;
+			rgb_of(md(pt.mx_t).colors[pt.shade >> 6], r2, g2, b2);
+			r = r * (1 - a) + r2 * a;
+			g = g * (1 - a) + g2 * a;
+			b = b * (1 - a) + b2 * a;
+		}
 		uint8_t *o = p + ((size_t)yy * iw + xx) * 4;
-		o[0] = (c >> 16) & 0xff;
-		o[1] = (c >> 8) & 0xff;
-		o[2] = c & 0xff;
+		o[0] = clamp8(r);
+		o[1] = clamp8(g);
+		o[2] = clamp8(b);
 		o[3] = 255;
 	}
 	image->set_data(iw, ih, false, Image::FORMAT_RGBA8, buf);
@@ -688,24 +943,69 @@ void SandWorld::render_glow(const Ref<Image> &image, int x0, int y0) {
 	buf.resize((int64_t)iw * ih * 4);
 	uint8_t *p = buf.ptrw();
 	memset(p, 0, (size_t)iw * ih * 4);
-	for (int yy = 0; yy < ih; yy++) {
+	const uint32_t tk = (uint32_t)tick;
+	auto put_px = [&](uint8_t *o, int r, int g, int b) {
+		o[0] = (uint8_t)std::min(255, r);
+		o[1] = (uint8_t)std::min(255, g);
+		o[2] = (uint8_t)std::min(255, b);
+		o[3] = 255;
+	};
+	for (int yy = 0; yy < ih && w; yy++) {
 		int wy = y0 + yy;
+		if (wy < 0 || wy >= h) {
+			continue;
+		}
 		for (int xx = 0; xx < iw; xx++) {
 			int wx = x0 + xx;
-			if (!in_bounds(wx, wy)) {
+			if (wx < 0 || wx >= w) {
 				continue;
 			}
-			int i = idx(wx, wy);
-			const MatDef &d = mat_def(mat[i]);
-			if (!d.glow) {
-				continue;
-			}
-			uint32_t c = d.glow;
+			int i = idx(wx, wy), t = mat[i];
+			const MatDef &d = md(t);
 			uint8_t *o = p + ((size_t)yy * iw + xx) * 4;
-			o[0] = (c >> 16) & 0xff;
-			o[1] = (c >> 8) & 0xff;
-			o[2] = c & 0xff;
-			o[3] = 255;
+			if (t == EMPTY) {
+				float hv = heat[i];
+				if (hv > 4) {
+					put_px(o, (int)std::min(90.0f, hv * 1.6f), (int)std::min(35.0f, hv * 0.5f), 0); // hot air glows faintly
+				}
+				continue;
+			}
+			if (d.kind == K_FIRE) {
+				const uint8_t *c = G_FIRE[fire_idx(life[i], heat[i], flick(i, tk))];
+				put_px(o, c[0], c[1], c[2]);
+			} else if (t == MIASMA) {
+				put_px(o, G_MIASMA[0], G_MIASMA[1], G_MIASMA[2]);
+			} else if (burn[i] || t == EMBER) {
+				const uint8_t *c = G_FIRE[t == EMBER ? 2 : 3];
+				put_px(o, c[0], c[1], c[2]);
+			} else if (st_l[i] && md(st_t[i]).st_glow) {
+				const MatDef &sd = md(st_t[i]);
+				int age = 63 - std::min(63, (int)(st_l[i] * 63 / std::max<int>(1, sd.st_ticks)));
+				if (age < 24) {
+					put_px(o, G_ICHOR_DIM[0], G_ICHOR_DIM[1], G_ICHOR_DIM[2]); // fresh ichor stains glow
+				}
+			} else if (t == ICHOR || (d.kind == K_LIQUID && mx_t[i] == ICHOR)) {
+				const uint8_t *c = mx_a[i] ? G_ICHOR_DIM : G_ICHOR;
+				put_px(o, c[0], c[1], c[2]);
+			} else if (t == HOLY) {
+				put_px(o, G_HOLY[0], G_HOLY[1], G_HOLY[2]);
+			} else if (d.glow) {
+				put_px(o, (d.glow >> 16) & 0xff, (d.glow >> 8) & 0xff, d.glow & 0xff);
+			}
+		}
+	}
+	for (const Particle &pt : particles) {
+		int xx = (int)pt.x - x0, yy = (int)pt.y - y0;
+		if (xx < 0 || yy < 0 || xx >= iw || yy >= ih) {
+			continue;
+		}
+		uint8_t *o = p + ((size_t)yy * iw + xx) * 4;
+		if (pt.mat == ICHOR) {
+			put_px(o, G_ICHOR[0], G_ICHOR[1], G_ICHOR[2]);
+		} else if (pt.mat == HOLY) {
+			put_px(o, G_HOLY[0], G_HOLY[1], G_HOLY[2]);
+		} else if (pt.mat == EMBER) {
+			put_px(o, G_FIRE[2][0], G_FIRE[2][1], G_FIRE[2][2]);
 		}
 	}
 	image->set_data(iw, ih, false, Image::FORMAT_RGBA8, buf);
@@ -724,12 +1024,20 @@ PackedByteArray SandWorld::get_cells() const {
 
 void SandWorld::set_cells(const PackedByteArray &cells) {
 	ERR_FAIL_COND_MSG((size_t)cells.size() != mat.size(), "SandWorld.set_cells: size does not match width*height.");
-	memcpy(mat.data(), cells.ptr(), mat.size());
-	std::fill(wear.begin(), wear.end(), 0.0f);
-	for (size_t i = 0; i < mat.size(); i++) {
-		const MatDef &d = mat_def(mat[i]);
-		life[i] = d.life_max ? d.life_max : 0;
+	const uint8_t *src = cells.ptr();
+	particles.clear();
+	bodies.clear();
+	collapse_seeds.clear();
+	crush_events = Array();
+	for (int i = 0; i < n; i++) {
+		uint8_t sh = shade[i];
+		put(i, src[i] < MAT_COUNT ? src[i] : EMPTY);
+		shade[i] = sh;
+		mov[i] = md(mat[i]).kind == K_POWDER ? 1 : 0;
+		heat[i] = 0;
 	}
+	std::fill(hot.begin(), hot.end(), 0);
+	std::fill(has_stain.begin(), has_stain.end(), 0);
 	std::fill(active_next.begin(), active_next.end(), 1);
 }
 
@@ -784,6 +1092,12 @@ void SandWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("ignite", "x", "y", "r"), &SandWorld::ignite);
 	ClassDB::bind_method(D_METHOD("explode", "cx", "cy", "r", "force"), &SandWorld::explode);
 	ClassDB::bind_method(D_METHOD("take_crush_events"), &SandWorld::take_crush_events);
+	ClassDB::bind_method(D_METHOD("get_heat", "x", "y"), &SandWorld::get_heat);
+	ClassDB::bind_method(D_METHOD("add_heat", "cx", "cy", "r", "amount"), &SandWorld::add_heat);
+	ClassDB::bind_method(D_METHOD("get_stain", "x", "y"), &SandWorld::get_stain);
+	ClassDB::bind_method(D_METHOD("is_burning", "x", "y"), &SandWorld::is_burning);
+	ClassDB::bind_method(D_METHOD("falling_chunk_count"), &SandWorld::falling_chunk_count);
+	ClassDB::bind_method(D_METHOD("particle_count"), &SandWorld::particle_count);
 
 	ClassDB::bind_method(D_METHOD("render_region", "image", "x0", "y0"), &SandWorld::render_region);
 	ClassDB::bind_method(D_METHOD("render_glow", "image", "x0", "y0"), &SandWorld::render_glow);
