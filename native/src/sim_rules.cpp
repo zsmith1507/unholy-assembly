@@ -547,7 +547,7 @@ void SandWorld::update_powder(int i, int x, int y, int t) {
 		mov[i] = 0;
 		return;
 	}
-	if (pd.slump < 1.0f && rnd() > pd.slump) { // flesh slumps, mud is sluggish: they only move some ticks
+	if (!steep && pd.slump < 1.0f && rnd() > pd.slump) { // flesh slumps, mud is sluggish: they only move some ticks (but tumble off a ledge)
 		wake_i(i);
 		return;
 	}
