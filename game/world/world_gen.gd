@@ -20,7 +20,8 @@ const GEN := {
 	"caves": 6, ## winding caves in the stone
 	"liquid_pockets": 3, ## small, deep, used sparingly
 	"town_width": 290, ## cells
-	"town_margin": 36, ## cells from the world edge to a town
+	"town_margin": 116, ## cells from the world edge to a town; the outer part is farmland
+	"field_width": 96, ## cells of fields outside each town, on the side away from the forest
 	"graveyard_gap": 14, ## cells between the left town and its graveyard
 	"spawn_clearing": 40, ## no trees within this many cells of the necromancer's start
 	"blend": 30, ## cells over which flattened town ground blends into the hills
@@ -34,9 +35,16 @@ const HOME := {
 	"gap": [10, 14], ## cells between buildings
 	"door_h": 32,
 	"wall": 2,
-	"foundation_rows": 5, ## stone at the foot of the walls
 	"chimney_chance": 0.55,
 }
+
+## Building styles, picked per home from where it stands. footing: rows of stone at the foot of the walls.
+const HOME_STYLES := [
+	{"wall": SandWorld.M_PLANK, "roof": SandWorld.M_WOOD, "footing": 5},
+	{"wall": SandWorld.M_WOOD, "roof": SandWorld.M_PLANK, "footing": 4},
+	{"wall": SandWorld.M_PLANK, "roof": SandWorld.M_WOOD, "footing": 12},
+	{"wall": SandWorld.M_CLAY, "roof": SandWorld.M_WOOD, "footing": 3},
+]
 
 const CHAPEL := {"width": 60, "wall_h": 46, "roof_h": 14, "steeple_h": 24, "door_h": 34, "wall": 3}
 
@@ -77,6 +85,8 @@ const PAL := {
 	"chapel_wall": [Color8(0x2e, 0x2a, 0x2c), Color8(0x29, 0x25, 0x27), Color8(0x33, 0x2f, 0x31), Color8(0x25, 0x21, 0x23)],
 	"glass": [Color8(0x6a, 0x4a, 0x2a), Color8(0x3a, 0x4a, 0x5a), Color8(0x5a, 0x2a, 0x2a), Color8(0x8a, 0x6a, 0x3a)],
 	"cloth": [Color8(0x5e, 0x55, 0x48), Color8(0x52, 0x4a, 0x3e)],
+	"crop": [Color8(0x6a, 0x5e, 0x30), Color8(0x5a, 0x52, 0x2a), Color8(0x4e, 0x55, 0x2a), Color8(0x72, 0x66, 0x38)],
+	"daub": [Color8(0x4a, 0x42, 0x34), Color8(0x45, 0x3d, 0x30), Color8(0x50, 0x47, 0x38), Color8(0x40, 0x39, 0x2d)],
 	"rust": [Color8(0x5a, 0x34, 0x22), Color8(0x4a, 0x2c, 0x1e), Color8(0x6a, 0x3e, 0x26)],
 }
 
@@ -87,6 +97,7 @@ var rng := RandomNumberGenerator.new()
 var noise := FastNoiseLite.new()
 var heights := PackedInt32Array() ## first solid (grass) row per column
 var flat_spans: Array = [] ## [x0, x1] spans kept flat for towns and the graveyard
+var forest_mid := 0 ## middle of the forest between the towns: the necromancer starts here
 var scenery: Image ## walk-through scenery at cell resolution, drawn behind the sim
 var trees_in_sim := false
 var trunk_mat := -1
@@ -125,11 +136,12 @@ func generate(world: SandWorld, seed: int) -> void:
 	_far_trees()
 	_towns()
 	_graveyard()
+	_fields()
 	_battlefield()
 	_catacomb()
 	_trees()
 	_grass_tufts()
-	spawn_cell = Vector2i(width / 2, heights[width / 2])
+	spawn_cell = Vector2i(forest_mid, heights[forest_mid])
 	_critter_zones()
 
 
@@ -143,7 +155,9 @@ func _plan_flat_spans() -> void:
 	var m: int = GEN.town_margin
 	var tw: int = GEN.town_width
 	# Left town, its graveyard just east of it (toward the forest); right town alone.
-	flat_spans = [[m, m + tw + GEN.graveyard_gap + _graveyard_width()], [width - m - tw, width - m]]
+	var f: int = GEN.field_width
+	flat_spans = [[m - f, m + tw + GEN.graveyard_gap + _graveyard_width()], [width - m - tw, width - m + f]]
+	forest_mid = (int(flat_spans[0][1]) + int(flat_spans[1][0])) / 2
 
 
 func _heightmap() -> void:
@@ -334,6 +348,11 @@ func build_home(r: Rect2i, decay: int, door_side: int) -> void:
 	var roof_h := roof_h_at(r.position.x)
 	var by := r.position.y + roof_h # top of the walls
 	var has_chimney := _hash(r.position.x, r.position.y) % 100 < int(HOME.chimney_chance * 100.0)
+	# Each home is built a little differently: plank, dark timber or wattle-and-daub, higher or lower footings.
+	var v := _hash(r.position.x + 11, r.position.y) % HOME_STYLES.size()
+	var style: Dictionary = HOME_STYLES[v]
+	var wall_mat: int = style.wall
+	var roof_mat: int = style.roof
 	# Clear the space first so a rebuild never leaves rubble inside.
 	var clear := Rect2i(r.position.x - 3, r.position.y - 8, r.size.x + 6, r.size.y + 8)
 	w.fill_rect(clear.position.x, clear.position.y, clear.size.x, clear.size.y, SandWorld.M_EMPTY)
@@ -344,7 +363,7 @@ func build_home(r: Rect2i, decay: int, door_side: int) -> void:
 	# Walls: stone footing, plank above. Door gap on the forest side, window on the other.
 	var door_x := r.end.x - wall if door_side > 0 else r.position.x
 	var win_x := r.position.x if door_side > 0 else r.end.x - wall
-	var foot := gy - int(HOME.foundation_rows)
+	var foot := gy - int(style.footing)
 	for side_x in [r.position.x, r.end.x - wall]:
 		for y in range(by, gy):
 			if side_x == door_x and y >= gy - int(HOME.door_h):
@@ -355,7 +374,7 @@ func build_home(r: Rect2i, decay: int, door_side: int) -> void:
 				if y >= foot and decay < 2:
 					w.set_mat(side_x + dx, y, SandWorld.M_STONE)
 				elif rr.randf() < keep_wall:
-					w.set_mat(side_x + dx, y, SandWorld.M_STONE if y >= foot else SandWorld.M_PLANK)
+					w.set_mat(side_x + dx, y, SandWorld.M_STONE if y >= foot else wall_mat)
 	if decay < 2:
 		w.fill_rect(r.position.x, by, r.size.x, 1, SandWorld.M_PLANK) # ceiling plate
 	# Pitched roof overhanging by three cells; a ruin keeps only scraps of it.
@@ -365,7 +384,7 @@ func build_home(r: Rect2i, decay: int, door_side: int) -> void:
 		var half := int(float(i + 1) / roof_h * (r.size.x / 2 + 3))
 		for x in range(cx - half, cx + half):
 			if rr.randf() < keep_roof or (decay < 2 and i == roof_h - 1):
-				w.set_mat(x, y, SandWorld.M_WOOD)
+				w.set_mat(x, y, roof_mat)
 	# Inside, mirrored so the bed is always on the far wall from the door: offsets from the far wall.
 	var inner := Rect2i(r.position.x + wall, by + 1, r.size.x - 2 * wall, gy - by - 1)
 	var hearth_o := inner.size.x - 11
@@ -376,7 +395,26 @@ func build_home(r: Rect2i, decay: int, door_side: int) -> void:
 		for x in range(inner.position.x, inner.end.x):
 			if rr.randf() < 0.25:
 				w.set_mat(x, gy - 1, SandWorld.M_RUBBLE)
-	_home_backdrop(inner, decay, door_side, has_chimney, hearth_o, rr)
+	_home_backdrop(inner, decay, door_side, has_chimney, hearth_o, rr, v)
+
+
+## One pixel of a home's back wall, by building style: brown boards, dark timber, boards over a stone
+## footing, or grimy daub between timber framing.
+func _backwall(style: int, dx: int, y: int, gy: int, board: int, seam: bool) -> Color:
+	var boards: Color = PAL.seam[0] if seam else PAL.backwall[(board + y / 9) % PAL.backwall.size()]
+	match style:
+		1:
+			return boards.darkened(0.3)
+		2:
+			if y >= gy - 12:
+				var course := (gy - y) / 3
+				var brick := (dx + (course % 2) * 3) % 6 == 0 or (gy - y) % 3 == 0
+				return PAL.seam[0] if brick else _tone(PAL.stone, dx, y).darkened(0.5)
+			return boards
+		3:
+			var frame := dx % 12 == 0 or dx % 12 == 1 or absi(y - (gy - 18)) < 1 or (dx % 12) == (gy - y) % 12
+			return _tone(PAL.bark, dx, y).darkened(0.2) if frame else _tone(PAL.daub, dx, y).darkened(0.25)
+	return boards
 
 
 ## World x of something `size` wide at offset `o` from the home's far wall (the wall without the door).
@@ -386,7 +424,7 @@ func _mirror(inner: Rect2i, door_side: int, o: int, size: int) -> int:
 
 ## The inside of a home seen from the front: board back wall, bed, table, hearth. Scenery, so residents
 ## walk in front of it. Emptied homes lose boards and their fire; ruins keep only a broken back wall.
-func _home_backdrop(inner: Rect2i, decay: int, door_side: int, hearth: bool, hearth_o: int, rr: RandomNumberGenerator) -> void:
+func _home_backdrop(inner: Rect2i, decay: int, door_side: int, hearth: bool, hearth_o: int, rr: RandomNumberGenerator, style := 0) -> void:
 	var miss: float = [0.0, 0.15, 0.5][decay]
 	var x0 := inner.position.x
 	var y0 := inner.position.y
@@ -401,7 +439,7 @@ func _home_backdrop(inner: Rect2i, decay: int, door_side: int, hearth: bool, hea
 		for y in range(y0, gy):
 			if y >= gone_from:
 				continue
-			_sc(x, y, PAL.seam[0] if seam else PAL.backwall[(board + y / 9) % PAL.backwall.size()].darkened(0.1 * decay))
+			_sc(x, y, _backwall(style, x - x0, y, gy, board, seam).darkened(0.1 * decay))
 	if decay == 2:
 		return
 	# Bed on the far wall: frame, blanket, pillow.
@@ -535,11 +573,61 @@ func _tombstone(x: int, base_y: int) -> void:
 	tombstones.append(Rect2i(x - 1, base_y - th, 8, th + 1))
 
 
+# ---------------------------------------------------------------- fields
+
+## Farmland on each town's far side from the forest (where Bodies and Souls sends farmers to work):
+## tilled soil with rows of sorry crops, fence posts and a scarecrow; Gallowmere keeps its gallows there.
+func _fields() -> void:
+	var f: int = GEN.field_width
+	for t in towns:
+		var r: Rect2i = t.rect
+		var x0: int = r.position.x - f if t.side < 0 else r.end.x
+		var gy: int = t.ground
+		var fr := Rect2i(x0 + 4, gy - 12, f - 8, 14)
+		if t.side < 0 and t.name == "Gallowmere":
+			_gallows(x0 + 4, gy)
+			fr = Rect2i(x0 + 26, gy - 12, f - 30, 14)
+		t["fields"] = fr
+		w.fill_rect(fr.position.x, gy, fr.size.x, 2, SandWorld.M_DIRT) # tilled soil
+		for x in range(fr.position.x + 2, fr.end.x - 2):
+			var k := (x - fr.position.x) % 4
+			if k == 0:
+				var ph := 3 + _hash(x, gy) % 5
+				for y in ph:
+					_sc(x, gy - 1 - y, _tone(PAL.crop, x, y))
+				_sc(x - 1, gy - ph, PAL.crop[0])
+				_sc(x + 1, gy - ph + 1, PAL.crop[2])
+		for px in [fr.position.x, fr.end.x - 1]:
+			_sc_rect(px, gy - 7, 1, 7, PAL.bark)
+		for x in range(fr.position.x, fr.end.x):
+			_sc(x, gy - 5, _tone(PAL.bark, x, gy))
+		# A scarecrow in a rag coat.
+		var sx := fr.position.x + fr.size.x / 2
+		_sc_rect(sx, gy - 20, 1, 20, PAL.bark)
+		_sc_rect(sx - 5, gy - 16, 11, 1, PAL.bark)
+		_sc_rect(sx - 2, gy - 16, 5, 7, PAL.cloth)
+		_sc_rect(sx - 1, gy - 20, 3, 3, PAL.crop)
+		_sc_rect(sx - 2, gy - 21, 5, 1, PAL.dead)
+
+
+## Gallowmere's gallows: two posts, a beam, a dangling rope. Scenery.
+func _gallows(x: int, gy: int) -> void:
+	_sc_rect(x, gy - 9, 18, 2, PAL.bark) # platform
+	_sc_rect(x + 1, gy - 7, 1, 7, PAL.bark)
+	_sc_rect(x + 16, gy - 7, 1, 7, PAL.bark)
+	_sc_rect(x + 2, gy - 34, 2, 25, PAL.bark)
+	_sc_rect(x + 2, gy - 34, 14, 2, PAL.bark)
+	_sc(x + 5, gy - 31, PAL.bark[0])
+	_sc(x + 6, gy - 32, PAL.bark[0])
+	_sc_rect(x + 13, gy - 32, 1, 8, PAL.cloth)
+	_sc_rect(x + 12, gy - 24, 3, 2, PAL.cloth)
+
+
 # ---------------------------------------------------------------- old battlefield teaser
 
 ## Rusted pikes and a torn banner on a rise in the right-hand forest, with old bones in the soil beneath.
 func _battlefield() -> void:
-	var x0 := width / 2 + 150
+	var x0 := forest_mid + 90
 	var x1 := mini(x0 + 90, int(flat_spans[1][0]) - int(GEN.blend) - 10)
 	if x1 - x0 < 40:
 		return
@@ -571,7 +659,7 @@ func _battlefield() -> void:
 func _catacomb() -> void:
 	var cw: int = CATACOMB.size.x
 	var ch: int = CATACOMB.size.y
-	var x := width / 2 - CATACOMB.offset_x - cw / 2
+	var x := forest_mid - CATACOMB.offset_x - cw / 2
 	var y := heights[x + cw / 2] + CATACOMB.depth
 	catacomb = Rect2i(x, y, cw, ch)
 	w.fill_rect(x - 3, y - 3, cw + 6, ch + 6, SandWorld.M_BRICK)
@@ -617,7 +705,7 @@ func _far_trees() -> void:
 
 func _trees() -> void:
 	var x := 6
-	var mid := width / 2
+	var mid := forest_mid
 	while x < width - 6:
 		x += rng.randi_range(TREES.spacing[0], TREES.spacing[1])
 		if x >= width - 6 or _in_flat(x, 8) or absi(x - mid) < GEN.spawn_clearing:
@@ -749,7 +837,7 @@ func _grass_tufts() -> void:
 
 
 func _critter_zones() -> void:
-	var mid := width / 2
+	var mid := forest_mid
 	var left_end: int = flat_spans[0][1] + 20
 	var right_start: int = flat_spans[1][0] - 20
 	for span in [[left_end, mid - 60], [mid + 60, right_start]]:

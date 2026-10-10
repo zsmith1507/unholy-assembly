@@ -66,7 +66,7 @@ func _px(r: Rect2i) -> Rect2:
 ## middle (by the necromancer's start), along the surface. A third route walks the graveyard.
 func _patrol_routes(surface_at: Callable, towns: Array) -> Array[PackedVector2Array]:
 	var out: Array[PackedVector2Array] = []
-	var mid := Sim.world_size_px().x * 0.5
+	var mid := float(gen.spawn_cell.x * Sim.CELL)
 	for t in towns:
 		var r: Rect2 = t.rect
 		var centre := r.get_center().x

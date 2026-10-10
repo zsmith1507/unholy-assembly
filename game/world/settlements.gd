@@ -47,8 +47,9 @@ func setup(world_gen: WorldGen) -> void:
 			_homes[h.id] = rec
 			homes_px.append(_public(rec))
 		var tr: Rect2i = t.rect
+		var fr: Rect2i = t.get("fields", Rect2i())
 		towns.append({"name": t.name, "side": t.side, "rect": Rect2(Vector2(tr.position) * c, Vector2(tr.size) * c),
-			"homes": homes_px})
+			"homes": homes_px, "fields": Rect2(Vector2(fr.position) * c, Vector2(fr.size) * c)})
 
 
 func _public(rec: Dictionary) -> Dictionary:

@@ -56,6 +56,12 @@ func run(t) -> void:
 	# --- towns: left and right of the start, homes an adult fits in, with a door toward the forest.
 	t.check(info.towns[0].side == -1 and info.towns[1].side == 1, "towns left and right")
 	t.check(info.towns[0].rect.end.x < spawn.x and info.towns[1].rect.position.x > spawn.x, "towns either side of the start")
+	var world_px := Rect2(Vector2.ZERO, Sim.world_size_px())
+	for town in info.towns:
+		var fr: Rect2 = town.get("fields", Rect2())
+		t.check(fr.has_area() and world_px.encloses(fr), "%s has fields inside the world" % town.name)
+		t.check(fr.get_center().x < town.rect.position.x if town.side < 0 else fr.get_center().x > town.rect.end.x, "%s fields lie away from the forest" % town.name)
+		t.check(town.rect.position.x - 220.0 >= 0.0 and town.rect.end.x + 220.0 <= world_px.end.x, "room for farmers' fields (220 px) beyond %s" % town.name)
 	for town in info.towns:
 		t.check(town.homes.size() >= 3, "%s has %d homes" % [town.name, town.homes.size()])
 		t.check(town.rect is Rect2 and town.homes[0].rect is Rect2, "town and home rects are Rect2")
@@ -126,17 +132,23 @@ func run(t) -> void:
 	s.home_emptied.connect(func(h): emptied.append(h.id))
 	s.resident_arrived.connect(func(h): arrived.append(h.id))
 	var hr := Rect2i(Vector2i(home.rect.position / c), Vector2i(home.rect.size / c))
-	var planks := func() -> int: return int(w.count_rect(hr.position.x, hr.position.y, hr.size.x, hr.size.y).get(SandWorld.M_PLANK, 0))
+	var planks := func() -> int:
+		var n := 0
+		for x in range(hr.position.x, hr.end.x):
+			for y in range(hr.position.y, hr.end.y):
+				if w.is_solid(x, y):
+					n += 1
+		return n
 	var p0: int = planks.call()
 	for i in home.residents:
 		s.resident_died(home.id)
 	t.check(s.home_at(centre).alive == 0 and emptied == [home.id], "home emptied, signal fired")
 	var p1: int = planks.call()
-	t.check(p1 < p0 and s.decay_of(home.id) == 1, "empty home runs down (%d -> %d planks)" % [p0, p1])
+	t.check(p1 < p0 and s.decay_of(home.id) == 1, "empty home runs down (%d -> %d solid cells)" % [p0, p1])
 	t.check(info.towns[0].homes[0].alive == 0, "info.towns sees the empty home")
 	s.advance_hours(13.0)
 	var p2: int = planks.call()
-	t.check(p2 < p1 and s.decay_of(home.id) == 2, "then it is a ruin (%d planks)" % p2)
+	t.check(p2 < p1 and s.decay_of(home.id) == 2, "then it is a ruin (%d solid cells)" % p2)
 	s.advance_hours(11.0)
 	t.check(s.home_at(centre).alive == 1 and arrived == [home.id] and s.decay_of(home.id) == 0, "a newcomer moves in and rebuilds")
 	t.check(planks.call() == p0, "rebuilt home matches the original")
