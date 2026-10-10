@@ -1,26 +1,80 @@
 class_name WorldGen
 extends RefCounted
 ## Seeded world generation into a SandWorld. Same seed, same world.
-## Fills the terrain column by column with fill_rect, then paints features (caves, pockets, trees, towns,
-## graveyard) on top. Returns a Dictionary of everything the installer needs to build `info`.
+## Fills the terrain column by column, then paints features (caves, liquid pockets, towns, graveyard) on top.
+## Things actors must walk through (trees, bushes, tombstones, the cemetery fence, the back walls of homes)
+## go into `scenery`, an image at cell resolution drawn just behind the sim, because every static sim
+## material blocks actors. When Pixel Physics adds a walk-through trunk material (SandWorld.M_TRUNK) and
+## makes LEAVES walk-through, the near trees move into the sim by themselves.
 
 const GEN := {
 	"surface_frac": 0.40, ## typical surface height as a fraction of world height
-	"hill_amp": 22.0, ## cells of rolling hill height either way
+	"hill_amp": 34.0, ## cells of rolling hill height either way
 	"hill_freq": 0.006,
 	"grass_depth": 2,
 	"earth_depth": 80, ## packed earth below the grass, before clay starts
 	"clay_depth": 60, ## clay band thickness
 	"bedrock_rows": 5,
-	"dirt_patches": 60, ## loose soil blobs in the earth layer
-	"caves": 5,
+	"dirt_patches": 70, ## loose soil blobs in the earth layer
+	"shallow_caves": 3, ## small air pockets in the clay
+	"caves": 6, ## winding caves in the stone
 	"liquid_pockets": 3, ## small, deep, used sparingly
-	"tree_spacing": [18, 34], ## cells between trunks
-	"town_width": 190, ## cells
-	"town_margin": 70, ## cells from the world edge to a town
-	"graveyard_width": 90,
-	"graves": 8,
+	"town_width": 290, ## cells
+	"town_margin": 36, ## cells from the world edge to a town
+	"graveyard_gap": 14, ## cells between the left town and its graveyard
 	"spawn_clearing": 40, ## no trees within this many cells of the necromancer's start
+	"blend": 30, ## cells over which flattened town ground blends into the hills
+}
+
+## Homes are sized for adults: a human is 58 px (29 cells) tall.
+const HOME := {
+	"width": [40, 48], ## cells
+	"wall_h": [36, 40], ## floor to ceiling, cells
+	"roof_h": [10, 13],
+	"gap": [10, 14], ## cells between buildings
+	"door_h": 32,
+	"wall": 2,
+	"foundation_rows": 5, ## stone at the foot of the walls
+	"chimney_chance": 0.55,
+}
+
+const CHAPEL := {"width": 60, "wall_h": 46, "roof_h": 14, "steeple_h": 24, "door_h": 34, "wall": 3}
+
+## Coffins hold a laid-out adult (about 52 px, 26 cells long).
+const GRAVES := {"count": 6, "pitch": 38, "coffin": Vector2i(34, 8), "depth": [10, 15], "margin": 8}
+
+const TREES := {
+	"spacing": [12, 26], ## cells between trunks
+	"height": [44, 80], ## cells
+	"dead_chance": 0.12,
+	"pine_chance": 0.3,
+	"bush_chance": 0.45,
+	"far_spacing": [8, 16], ## the darker row of trees further back
+	"tuft_chance": 0.35, ## grass blades per surface column
+	"sim_material": "M_TRUNK", ## when SandWorld has this constant, near trees go into the sim
+}
+
+## Scenery colours (a few tones each), matched to the sim's palette.
+const PAL := {
+	"bark": [Color8(0x4d, 0x32, 0x20), Color8(0x43, 0x2b, 0x1b), Color8(0x57, 0x3a, 0x26), Color8(0x3b, 0x26, 0x18)],
+	"dead": [Color8(0x4a, 0x42, 0x3a), Color8(0x40, 0x39, 0x32), Color8(0x55, 0x4c, 0x43), Color8(0x36, 0x30, 0x2a)],
+	"leaf": [Color8(0x2c, 0x3a, 0x1f), Color8(0x26, 0x33, 0x1a), Color8(0x33, 0x42, 0x25), Color8(0x1f, 0x2b, 0x15)],
+	"leaf_lit": [Color8(0x3b, 0x4b, 0x27), Color8(0x42, 0x52, 0x2b), Color8(0x36, 0x46, 0x24), Color8(0x45, 0x55, 0x2e)],
+	"pine": [Color8(0x1d, 0x2e, 0x24), Color8(0x19, 0x28, 0x1f), Color8(0x22, 0x35, 0x29), Color8(0x15, 0x22, 0x1a)],
+	"far": [Color8(0x1a, 0x1f, 0x19), Color8(0x17, 0x1c, 0x17), Color8(0x1d, 0x23, 0x1c), Color8(0x15, 0x19, 0x14)],
+	"grass": [Color8(0x3d, 0x4a, 0x26), Color8(0x45, 0x53, 0x2c), Color8(0x4b, 0x56, 0x2e), Color8(0x36, 0x42, 0x1f)],
+	"stone": [Color8(0x55, 0x54, 0x5c), Color8(0x4b, 0x4a, 0x52), Color8(0x5f, 0x5e, 0x66), Color8(0x43, 0x42, 0x49)],
+	"moss": [Color8(0x3a, 0x48, 0x28), Color8(0x33, 0x40, 0x22)],
+	"iron": [Color8(0x22, 0x21, 0x26), Color8(0x1c, 0x1b, 0x20), Color8(0x29, 0x28, 0x2e), Color8(0x18, 0x17, 0x1b)],
+	"backwall": [Color8(0x2a, 0x1d, 0x14), Color8(0x25, 0x1a, 0x12), Color8(0x30, 0x22, 0x17), Color8(0x21, 0x17, 0x10)],
+	"seam": [Color8(0x14, 0x0e, 0x0a)],
+	"blanket": [Color8(0x5a, 0x2a, 0x26), Color8(0x4e, 0x24, 0x21)],
+	"hearth": [Color8(0x3a, 0x34, 0x33), Color8(0x30, 0x2b, 0x2a)],
+	"ember": [Color8(0x9a, 0x45, 0x1c), Color8(0x7a, 0x30, 0x16), Color8(0xc4, 0x5c, 0x22)],
+	"chapel_wall": [Color8(0x2e, 0x2a, 0x2c), Color8(0x29, 0x25, 0x27), Color8(0x33, 0x2f, 0x31), Color8(0x25, 0x21, 0x23)],
+	"glass": [Color8(0x6a, 0x4a, 0x2a), Color8(0x3a, 0x4a, 0x5a), Color8(0x5a, 0x2a, 0x2a), Color8(0x8a, 0x6a, 0x3a)],
+	"cloth": [Color8(0x5e, 0x55, 0x48), Color8(0x52, 0x4a, 0x3e)],
+	"rust": [Color8(0x5a, 0x34, 0x22), Color8(0x4a, 0x2c, 0x1e), Color8(0x6a, 0x3e, 0x26)],
 }
 
 var w: SandWorld
@@ -30,12 +84,18 @@ var rng := RandomNumberGenerator.new()
 var noise := FastNoiseLite.new()
 var heights := PackedInt32Array() ## first solid (grass) row per column
 var flat_spans: Array = [] ## [x0, x1] spans kept flat for towns and the graveyard
+var scenery: Image ## walk-through scenery at cell resolution, drawn behind the sim
+var trees_in_sim := false
+var trunk_mat := -1
 
-var towns: Array = [] ## {name, rect(cells), side, homes:[{id, rect(cells), residents, alive}], chapel(rect), torches}
+## {name, rect(cells), side, door_side, ground, homes:[{id, rect(cells), residents, alive, door_side}], chapel, torches}
+var towns: Array = []
 var graveyard := Rect2i()
 var graves: Array = [] ## coffin centres in cells
-var tombstones: Array = [] ## Rect2i in cells
+var coffins: Array = [] ## Rect2i in cells
+var tombstones: Array = [] ## Rect2i in cells (scenery)
 var critter_zones: Array = [] ## Rect2i in cells
+var battlefield := Rect2i() ## the old battlefield teaser, in cells
 var spawn_cell := Vector2i()
 
 
@@ -48,27 +108,37 @@ func generate(world: SandWorld, seed: int) -> void:
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = GEN.hill_freq
 	noise.fractal_octaves = 3
+	scenery = Image.create(width, height, false, Image.FORMAT_RGBA8)
+	if ClassDB.class_has_integer_constant(&"SandWorld", StringName(TREES.sim_material)):
+		trees_in_sim = true
+		trunk_mat = ClassDB.class_get_integer_constant(&"SandWorld", StringName(TREES.sim_material))
 	_plan_flat_spans()
 	_heightmap()
 	_terrain()
 	_dirt_patches()
 	_caves()
 	_liquid_pockets()
+	_far_trees()
 	_towns()
 	_graveyard()
+	_battlefield()
 	_trees()
+	_grass_tufts()
 	spawn_cell = Vector2i(width / 2, heights[width / 2])
 	_critter_zones()
 
 
 # ---------------------------------------------------------------- terrain
 
+func _graveyard_width() -> int:
+	return GRAVES.margin * 2 + GRAVES.count * GRAVES.pitch
+
+
 func _plan_flat_spans() -> void:
 	var m: int = GEN.town_margin
 	var tw: int = GEN.town_width
-	var gw: int = GEN.graveyard_width
-	# Left town, its graveyard just east of it; right town alone.
-	flat_spans = [[m, m + tw + 12 + gw], [width - m - tw, width - m]]
+	# Left town, its graveyard just east of it (toward the forest); right town alone.
+	flat_spans = [[m, m + tw + GEN.graveyard_gap + _graveyard_width()], [width - m - tw, width - m]]
 
 
 func _heightmap() -> void:
@@ -77,19 +147,20 @@ func _heightmap() -> void:
 	var raw := PackedFloat32Array()
 	raw.resize(width)
 	for x in width:
-		raw[x] = base + noise.get_noise_1d(x) * GEN.hill_amp * 1.6
-	# Flatten town spans to their mean height and blend the edges over 30 cells.
+		raw[x] = base + noise.get_noise_1d(x) * GEN.hill_amp
+	# Flatten town spans to their mean height and blend the edges.
+	var bl: int = GEN.blend
 	for span in flat_spans:
 		var avg := 0.0
 		for x in range(span[0], span[1]):
 			avg += raw[x]
 		avg /= float(span[1] - span[0])
-		for x in range(maxi(0, span[0] - 30), mini(width, span[1] + 30)):
+		for x in range(maxi(0, span[0] - bl), mini(width, span[1] + bl)):
 			var t := 1.0
 			if x < span[0]:
-				t = 1.0 - float(span[0] - x) / 30.0
+				t = 1.0 - float(span[0] - x) / bl
 			elif x >= span[1]:
-				t = 1.0 - float(x - span[1] + 1) / 30.0
+				t = 1.0 - float(x - span[1] + 1) / bl
 			t = smoothstep(0.0, 1.0, t)
 			raw[x] = lerpf(raw[x], avg, t)
 	for x in width:
@@ -101,9 +172,9 @@ func _terrain() -> void:
 	for x in width:
 		var top := heights[x]
 		var g: int = GEN.grass_depth
-		var e_end := top + g + GEN.earth_depth + int(noise.get_noise_2d(x, 500) * 8.0)
-		var c_end := e_end + GEN.clay_depth + int(noise.get_noise_2d(x, 900) * 10.0)
-		var b_start := height - br - int(absf(noise.get_noise_2d(x, 1300)) * 4.0)
+		var e_end := top + g + GEN.earth_depth + int(noise.get_noise_2d(x, 500) * 10.0)
+		var c_end := e_end + GEN.clay_depth + int(noise.get_noise_2d(x, 900) * 14.0)
+		var b_start := height - br - int(absf(noise.get_noise_2d(x * 3, 1300)) * 6.0)
 		w.fill_rect(x, top, 1, g, SandWorld.M_GRASS)
 		w.fill_rect(x, top + g, 1, e_end - top - g, SandWorld.M_EARTH)
 		w.fill_rect(x, e_end, 1, c_end - e_end, SandWorld.M_CLAY)
@@ -112,18 +183,28 @@ func _terrain() -> void:
 
 
 func _dirt_patches() -> void:
+	# Loose soil in the packed earth: easy digging, and it slumps when opened.
 	for i in GEN.dirt_patches:
 		var x := rng.randi_range(4, width - 5)
-		var y := heights[x] + rng.randi_range(6, GEN.earth_depth)
-		w.paint_circle(x, y, rng.randi_range(3, 7), SandWorld.M_DIRT, false)
+		var r := rng.randi_range(3, 7)
+		var y := heights[x] + rng.randi_range(r + 4, GEN.earth_depth - r)
+		w.paint_circle(x, y, r, SandWorld.M_DIRT, false)
 	# Stone and clay lenses for texture.
 	for i in 40:
 		var x := rng.randi_range(4, width - 5)
-		var y := heights[x] + rng.randi_range(60, 160)
+		var y := heights[x] + rng.randi_range(60, 170)
 		w.paint_circle(x, y, rng.randi_range(3, 6), SandWorld.M_STONE if i % 2 else SandWorld.M_CLAY, false)
 
 
 func _caves() -> void:
+	# A few small pockets in the clay, then winding caves in the stone.
+	for i in GEN.shallow_caves:
+		var x := rng.randi_range(120, width - 160)
+		var y := heights[x] + GEN.earth_depth + rng.randi_range(14, 40)
+		if _in_flat(x, 40):
+			continue
+		for s in rng.randi_range(3, 6):
+			w.paint_circle(x + s * 5, y + rng.randi_range(-2, 2), rng.randi_range(4, 7), SandWorld.M_EMPTY, false)
 	for i in GEN.caves:
 		var x := float(rng.randi_range(100, width - 100))
 		var y := float(heights[int(x)] + rng.randi_range(170, 330))
@@ -132,8 +213,7 @@ func _caves() -> void:
 		var r := rng.randf_range(9.0, 14.0)
 		for s in rng.randi_range(14, 24):
 			w.paint_circle(int(x), int(y), int(r), SandWorld.M_EMPTY, false)
-			# Rubble on the cave floor.
-			w.paint_circle(int(x), int(y + r) , 2, SandWorld.M_RUBBLE, false)
+			w.paint_circle(int(x), int(y + r), 2, SandWorld.M_RUBBLE, false) # rubble on the cave floor
 			r = clampf(r + rng.randf_range(-2.0, 2.0), 7.0, 16.0)
 			ang += rng.randf_range(-0.5, 0.5)
 			x = clampf(x + cos(ang) * 7.0, 30, width - 30)
@@ -158,7 +238,41 @@ func _basin(cx: int, cy: int, r: int, mat: int) -> void:
 				w.set_mat(x, y, mat)
 
 
+# ---------------------------------------------------------------- scenery helpers
+
+func _hash(x: int, y: int) -> int:
+	var h := (x * 374761393 + y * 668265263) & 0x7fffffff
+	h = ((h ^ (h >> 13)) * 1274126177) & 0x7fffffff
+	return h ^ (h >> 16)
+
+
+func _tone(pal: Array, x: int, y: int) -> Color:
+	return pal[_hash(x, y) % pal.size()]
+
+
+func _sc(x: int, y: int, c: Color) -> void:
+	if x >= 0 and y >= 0 and x < width and y < height:
+		scenery.set_pixel(x, y, c)
+
+
+func _sc_rect(x: int, y: int, ww: int, hh: int, pal: Array) -> void:
+	for yy in range(y, y + hh):
+		for xx in range(x, x + ww):
+			_sc(xx, yy, _tone(pal, xx, yy))
+
+
+func _sc_clear(r: Rect2i) -> void:
+	var c := r.intersection(Rect2i(0, 0, width, height))
+	if c.has_area():
+		scenery.fill_rect(c, Color(0, 0, 0, 0))
+
+
 # ---------------------------------------------------------------- towns
+
+## Roof height of a home, fixed by where it stands so a rebuild matches the original.
+static func roof_h_at(x: int) -> int:
+	return HOME.roof_h[0] + posmod(x * 7, HOME.roof_h[1] - HOME.roof_h[0] + 1)
+
 
 func _towns() -> void:
 	var m: int = GEN.town_margin
@@ -170,133 +284,284 @@ func _towns() -> void:
 	var next_id := 0
 	for s in specs:
 		var x0: int = s.x0
+		var end := x0 + tw - 8
 		var gy := heights[x0 + tw / 2]
-		var town := {"name": s.name, "side": s.side, "rect": Rect2i(x0, gy - 60, tw, 60), "homes": [], "torches": [], "chapel": Rect2i()}
-		var x := x0 + 6
-		var built_chapel := false
-		while x < x0 + tw - 30:
-			if s.chapel and not built_chapel and x > x0 + tw / 2 - 30:
-				var cw := 34
-				town.chapel = _chapel(x, gy, cw)
-				town.torches.append(Vector2i(x - 3, gy - 14))
-				town.torches.append(Vector2i(x + cw + 2, gy - 14))
-				built_chapel = true
-				x += cw + 10
-				continue
-			var hw := rng.randi_range(24, 32)
-			var hh := rng.randi_range(18, 24)
-			var rect := Rect2i(x, gy - hh, hw, hh)
-			build_home(rect, false)
-			town.homes.append({"id": next_id, "rect": rect, "residents": rng.randi_range(1, 3), "alive": 0})
-			town.homes[-1].alive = town.homes[-1].residents
-			next_id += 1
-			town.torches.append(Vector2i(x + hw + 4, gy - 14))
-			x += hw + rng.randi_range(8, 14)
+		var door_side: int = -s.side # doors face the forest
+		var town := {"name": s.name, "side": s.side, "door_side": door_side, "ground": gy,
+			"rect": Rect2i(x0, gy - 90, tw, 90), "homes": [], "torches": [], "chapel": Rect2i()}
+		var x := x0 + 8
+		var built := 0
+		var chapel_done: bool = not s.chapel
+		while true:
+			if not chapel_done and built == 1:
+				if x + CHAPEL.width > end:
+					break
+				town.chapel = _chapel(x, gy, door_side)
+				chapel_done = true
+				x += CHAPEL.width
+			else:
+				var hw := rng.randi_range(HOME.width[0], HOME.width[1])
+				if x + hw > end:
+					break
+				var hh := rng.randi_range(HOME.wall_h[0], HOME.wall_h[1]) + roof_h_at(x)
+				var rect := Rect2i(x, gy - hh, hw, hh)
+				build_home(rect, 0, door_side)
+				var n := rng.randi_range(1, 3)
+				town.homes.append({"id": next_id, "rect": rect, "residents": n, "alive": n, "door_side": door_side})
+				next_id += 1
+				built += 1
+				x += hw
+			var gap := rng.randi_range(HOME.gap[0], HOME.gap[1])
+			if x + gap / 2 < x0 + tw:
+				town.torches.append(Vector2i(x + gap / 2, gy - 12))
+			x += gap
 		towns.append(town)
 
 
-## Plank walls, an empty interior, a door on the side facing the forest, a wooden roof.
-## `ruined` knocks out most of the walls and roof: an empty home, decaying.
-func build_home(r: Rect2i, ruined: bool) -> void:
-	var wall := SandWorld.M_PLANK
-	var roof_h := 5
-	var body := Rect2i(r.position.x, r.position.y + roof_h, r.size.x, r.size.y - roof_h)
+## A poor timber home: stone footing, plank walls, a door toward the forest, a window, a wooden roof,
+## a plank floor, and a back wall with a bed, table and hearth (scenery). `decay`: 0 lived in,
+## 1 emptied and running down, 2 a ruin.
+func build_home(r: Rect2i, decay: int, door_side: int) -> void:
+	var rr := RandomNumberGenerator.new()
+	rr.seed = r.position.x * 7919 + r.position.y * 31 + decay * 104729
+	var wall: int = HOME.wall
+	var gy := r.end.y
+	var roof_h := roof_h_at(r.position.x)
+	var by := r.position.y + roof_h # top of the walls
+	var has_chimney := _hash(r.position.x, r.position.y) % 100 < int(HOME.chimney_chance * 100.0)
 	# Clear the space first so a rebuild never leaves rubble inside.
-	w.fill_rect(r.position.x - 2, r.position.y - 1, r.size.x + 4, r.size.y + 1, SandWorld.M_EMPTY)
-	if ruined:
-		var rr := RandomNumberGenerator.new()
-		rr.seed = r.position.x * 7919 + r.position.y
-		for y in range(body.position.y, body.end.y):
-			if rr.randf() < 0.45:
-				w.set_mat(body.position.x, y, wall)
-			if rr.randf() < 0.35:
-				w.set_mat(body.end.x - 1, y, wall)
-		for x in range(body.position.x, body.end.x):
-			if rr.randf() < 0.2:
-				w.set_mat(x, body.end.y - 1, SandWorld.M_RUBBLE)
-		return
-	w.fill_rect(body.position.x, body.position.y, 2, body.size.y, wall)
-	w.fill_rect(body.end.x - 2, body.position.y, 2, body.size.y, wall)
-	# Door: a gap in the left wall, 14 cells tall (characters are 32 cells; they duck in the art).
-	var door_h := mini(body.size.y - 2, 16)
-	w.fill_rect(body.position.x, body.end.y - door_h, 2, door_h, SandWorld.M_EMPTY)
-	# Window in the right wall.
-	w.fill_rect(body.end.x - 2, body.position.y + 3, 2, 3, SandWorld.M_EMPTY)
-	# Pitched roof of wood, overhanging by two cells.
-	for i in roof_h + 1:
+	var clear := Rect2i(r.position.x - 3, r.position.y - 8, r.size.x + 6, r.size.y + 8)
+	w.fill_rect(clear.position.x, clear.position.y, clear.size.x, clear.size.y, SandWorld.M_EMPTY)
+	_sc_clear(clear)
+	var keep_wall: float = [1.0, 0.8, 0.45][decay]
+	var keep_roof: float = [1.0, 0.7, 0.2][decay]
+	w.fill_rect(r.position.x, gy, r.size.x, 1, SandWorld.M_PLANK) # floor
+	# Walls: stone footing, plank above. Door gap on the forest side, window on the other.
+	var door_x := r.end.x - wall if door_side > 0 else r.position.x
+	var win_x := r.position.x if door_side > 0 else r.end.x - wall
+	var foot := gy - int(HOME.foundation_rows)
+	for side_x in [r.position.x, r.end.x - wall]:
+		for y in range(by, gy):
+			if side_x == door_x and y >= gy - int(HOME.door_h):
+				continue
+			if side_x == win_x and y >= by + 7 and y < by + 13:
+				continue
+			for dx in wall:
+				if y >= foot and decay < 2:
+					w.set_mat(side_x + dx, y, SandWorld.M_STONE)
+				elif rr.randf() < keep_wall:
+					w.set_mat(side_x + dx, y, SandWorld.M_STONE if y >= foot else SandWorld.M_PLANK)
+	if decay < 2:
+		w.fill_rect(r.position.x, by, r.size.x, 1, SandWorld.M_PLANK) # ceiling plate
+	# Pitched roof overhanging by three cells; a ruin keeps only scraps of it.
+	var cx := r.position.x + r.size.x / 2
+	for i in roof_h:
 		var y := r.position.y + i
-		var inset := (roof_h - i) * (r.size.x / 2) / (roof_h + 1)
-		w.fill_rect(r.position.x - 2 + inset, y, r.size.x + 4 - 2 * inset, 1, SandWorld.M_WOOD)
-	w.fill_rect(body.position.x, body.position.y, body.size.x, 1, SandWorld.M_PLANK)
+		var half := int(float(i + 1) / roof_h * (r.size.x / 2 + 3))
+		for x in range(cx - half, cx + half):
+			if rr.randf() < keep_roof or (decay < 2 and i == roof_h - 1):
+				w.set_mat(x, y, SandWorld.M_WOOD)
+	# Inside, mirrored so the bed is always on the far wall from the door: offsets from the far wall.
+	var inner := Rect2i(r.position.x + wall, by + 1, r.size.x - 2 * wall, gy - by - 1)
+	var hearth_o := inner.size.x - 11
+	if has_chimney and decay < 2:
+		var chx := _mirror(inner, door_side, hearth_o + 3, 4)
+		w.fill_rect(chx, r.position.y - 5 + roof_h / 3, 4, roof_h - roof_h / 3 + 5, SandWorld.M_BRICK)
+	if decay == 2:
+		for x in range(inner.position.x, inner.end.x):
+			if rr.randf() < 0.25:
+				w.set_mat(x, gy - 1, SandWorld.M_RUBBLE)
+	_home_backdrop(inner, decay, door_side, has_chimney, hearth_o, rr)
 
 
-func _chapel(x: int, gy: int, cw: int) -> Rect2i:
-	var hh := 34
-	var r := Rect2i(x, gy - hh, cw, hh)
-	w.fill_rect(x, gy - hh + 8, 3, hh - 8, SandWorld.M_BRICK)
-	w.fill_rect(x + cw - 3, gy - hh + 8, 3, hh - 8, SandWorld.M_BRICK)
-	w.fill_rect(x, gy - 18, 3, 18, SandWorld.M_EMPTY) # door
-	w.fill_rect(x + cw - 3, gy - 26, 3, 5, SandWorld.M_EMPTY) # window
-	w.fill_rect(x, gy - hh + 8, cw, 2, SandWorld.M_BRICK)
-	for i in 8:
-		var inset := (8 - i) * (cw / 2) / 9
-		w.fill_rect(x + inset, gy - hh + i, cw - 2 * inset, 1, SandWorld.M_BRICK)
-	# Steeple.
-	w.fill_rect(x + cw / 2 - 2, gy - hh - 14, 4, 14, SandWorld.M_BRICK)
-	w.fill_rect(x + cw / 2 - 1, gy - hh - 20, 2, 6, SandWorld.M_WOOD)
-	w.fill_rect(x + cw / 2 - 3, gy - hh - 18, 6, 1, SandWorld.M_WOOD)
-	# Holy water under the chapel, in a stone cistern.
+## World x of something `size` wide at offset `o` from the home's far wall (the wall without the door).
+func _mirror(inner: Rect2i, door_side: int, o: int, size: int) -> int:
+	return inner.position.x + o if door_side > 0 else inner.end.x - o - size
+
+
+## The inside of a home seen from the front: board back wall, bed, table, hearth. Scenery, so residents
+## walk in front of it. Emptied homes lose boards and their fire; ruins keep only a broken back wall.
+func _home_backdrop(inner: Rect2i, decay: int, door_side: int, hearth: bool, hearth_o: int, rr: RandomNumberGenerator) -> void:
+	var miss: float = [0.0, 0.15, 0.5][decay]
+	var x0 := inner.position.x
+	var y0 := inner.position.y
+	var gy := inner.end.y
+	var board := -1
+	var gone_from := 0
+	for x in range(x0, inner.end.x):
+		if (x - x0) % 3 == 0:
+			board += 1
+			gone_from = y0 + rr.randi_range(0, inner.size.y) if rr.randf() < miss else gy + 1
+		var seam := (x - x0) % 3 == 2
+		for y in range(y0, gy):
+			if y >= gone_from:
+				continue
+			_sc(x, y, PAL.seam[0] if seam else PAL.backwall[(board + y / 9) % PAL.backwall.size()].darkened(0.1 * decay))
+	if decay == 2:
+		return
+	# Bed on the far wall: frame, blanket, pillow.
+	var bx := _mirror(inner, door_side, 1, 14)
+	_sc_rect(bx, gy - 4, 14, 1, PAL.bark)
+	_sc_rect(bx, gy - 6, 14, 2, PAL.blanket if decay == 0 else PAL.cloth)
+	_sc_rect(_mirror(inner, door_side, 1, 4), gy - 7, 4, 1, PAL.cloth)
+	_sc_rect(bx, gy - 3, 1, 3, PAL.bark)
+	_sc_rect(bx + 13, gy - 3, 1, 3, PAL.bark)
+	# Table in the middle, a crooked portrait of someone's dear departed above it.
+	var tx := _mirror(inner, door_side, 16, 9)
+	_sc_rect(tx, gy - 8, 9, 1, PAL.bark)
+	_sc_rect(tx + 1, gy - 7, 1, 7, PAL.bark)
+	_sc_rect(tx + 7, gy - 7, 1, 7, PAL.bark)
+	_sc_rect(tx + 2, y0 + 6, 5, 6, PAL.bark)
+	_sc_rect(tx + 3, y0 + 7, 3, 4, PAL.cloth)
+	# Hearth under the chimney; embers only while someone lives here.
+	if hearth:
+		var hx := _mirror(inner, door_side, hearth_o, 10)
+		_sc_rect(hx, gy - 12, 10, 12, PAL.hearth)
+		_sc_rect(hx + 2, gy - 7, 6, 7, PAL.seam)
+		if decay == 0:
+			_sc_rect(hx + 3, gy - 2, 4, 2, PAL.ember)
+
+
+func _chapel(x: int, gy: int, door_side: int) -> Rect2i:
+	var cw: int = CHAPEL.width
+	var wall: int = CHAPEL.wall
+	var wh: int = CHAPEL.wall_h
+	var rh: int = CHAPEL.roof_h
+	var r := Rect2i(x, gy - wh - rh, cw, wh + rh)
+	var by := gy - wh
 	var cx := x + cw / 2
-	var cy := gy + 26
-	w.fill_rect(cx - 14, cy - 8, 28, 16, SandWorld.M_STONE)
-	w.fill_rect(cx - 11, cy - 5, 22, 10, SandWorld.M_EMPTY)
-	w.fill_rect(cx - 11, cy - 1, 22, 6, SandWorld.M_HOLY)
+	# Inside first (scenery): dim stone, a stained window, an altar with a rusty cross.
+	_sc_rect(x + wall, by + 2, cw - 2 * wall, wh - 2, PAL.chapel_wall)
+	_sc_rect(cx - 6, by + 8, 12, 16, PAL.seam)
+	for yy in range(by + 9, by + 23):
+		for xx in range(cx - 5, cx + 5):
+			_sc(xx, yy, PAL.glass[posmod((xx - cx) / 3 + (yy - by) / 4, PAL.glass.size())].darkened(0.25))
+	_sc_rect(cx - 9, gy - 8, 18, 8, PAL.stone)
+	_sc_rect(cx - 10, gy - 9, 20, 1, PAL.cloth)
+	_sc_rect(cx - 1, gy - 16, 2, 7, PAL.rust)
+	_sc_rect(cx - 3, gy - 14, 6, 1, PAL.rust)
+	# Stone and brick shell.
+	w.fill_rect(x, gy, cw, 1, SandWorld.M_STONE) # flagstone floor
+	var door_x := x + cw - wall if door_side > 0 else x
+	var win_x := x if door_side > 0 else x + cw - wall
+	for sx in [x, x + cw - wall]:
+		w.fill_rect(sx, by, wall, wh, SandWorld.M_BRICK)
+		w.fill_rect(sx, gy - 6, wall, 6, SandWorld.M_STONE)
+	w.fill_rect(door_x, gy - int(CHAPEL.door_h), wall, CHAPEL.door_h, SandWorld.M_EMPTY)
+	w.fill_rect(win_x, by + 8, wall, 14, SandWorld.M_EMPTY)
+	w.fill_rect(x, by, cw, 2, SandWorld.M_BRICK)
+	for i in rh:
+		var half := int(float(i + 1) / rh * (cw / 2 + 3))
+		w.fill_rect(cx - half, r.position.y + i, half * 2, 1, SandWorld.M_STONE)
+	# Steeple with a bell window and a wooden cross.
+	var st: int = CHAPEL.steeple_h
+	w.fill_rect(cx - 3, r.position.y - st, 6, st, SandWorld.M_BRICK)
+	w.fill_rect(cx - 2, r.position.y - st + 4, 4, 5, SandWorld.M_EMPTY)
+	w.fill_rect(cx - 1, r.position.y - st - 9, 2, 9, SandWorld.M_WOOD)
+	w.fill_rect(cx - 4, r.position.y - st - 7, 8, 2, SandWorld.M_WOOD)
+	# Holy water under the chapel, in a stone cistern (stone holds liquids).
+	var cy := gy + 24
+	w.fill_rect(cx - 16, cy - 9, 32, 18, SandWorld.M_STONE)
+	w.fill_rect(cx - 13, cy - 6, 26, 12, SandWorld.M_EMPTY)
+	w.fill_rect(cx - 13, cy - 1, 26, 7, SandWorld.M_HOLY)
 	return r
 
 
 func _graveyard() -> void:
 	var t: Dictionary = towns[0]
-	var x0: int = t.rect.end.x + 12
-	var gw: int = GEN.graveyard_width
+	var x0: int = t.rect.end.x + GEN.graveyard_gap
+	var gw := _graveyard_width()
 	var gy := heights[x0 + gw / 2]
-	graveyard = Rect2i(x0, gy - 12, gw, 36)
-	# Iron-ish fence posts (stone) along the front.
-	for x in range(x0, x0 + gw, 6):
-		w.fill_rect(x, gy - 6, 1, 6, SandWorld.M_STONE)
-	w.fill_rect(x0, gy - 6, gw, 1, SandWorld.M_STONE)
-	var n: int = GEN.graves
-	var step := (gw - 10) / n
-	for i in n:
-		var gx := x0 + 6 + i * step
-		var depth := rng.randi_range(12, 18)
-		# Tombstone: a small stone slab, a few leaning.
-		var th := rng.randi_range(5, 8)
-		var tomb := Rect2i(gx + 1, gy - th, 4, th)
-		w.fill_rect(tomb.position.x, tomb.position.y, tomb.size.x, tomb.size.y, SandWorld.M_STONE)
-		w.set_mat(tomb.position.x, tomb.position.y, SandWorld.M_EMPTY)
-		w.set_mat(tomb.end.x - 1, tomb.position.y, SandWorld.M_EMPTY)
-		tombstones.append(tomb)
-		# Grave dirt above the coffin: loose, easy digging.
-		w.fill_rect(gx, gy, 8, depth, SandWorld.M_DIRT)
-		# Hollow coffin: a wood shell with bones inside.
-		var cr := Rect2i(gx - 1, gy + depth, 10, 6)
+	# Wrought-iron fence behind the plot (scenery), stone gateposts on the town side.
+	for x in range(x0 + 10, x0 + gw):
+		if (x - x0) % 5 == 0:
+			_sc_rect(x, gy - 13, 1, 13, PAL.iron)
+			_sc(x, gy - 14, PAL.iron[2])
+		_sc(x, gy - 11, PAL.iron[0])
+		_sc(x, gy - 4, PAL.iron[1])
+	for gx in [x0, x0 + 9]:
+		_sc_rect(gx, gy - 16, 2, 16, PAL.stone)
+	var deepest := gy
+	for i in GRAVES.count:
+		var gx: int = x0 + GRAVES.margin + i * GRAVES.pitch
+		var cs: Vector2i = GRAVES.coffin
+		var depth := rng.randi_range(GRAVES.depth[0], GRAVES.depth[1])
+		_tombstone(gx + (2 if i % 2 == 0 else cs.x - 8), gy - 1)
+		# Grave dirt over the coffin: loose, easy digging, with a low mound.
+		w.fill_rect(gx, gy, cs.x, depth, SandWorld.M_DIRT)
+		w.fill_rect(gx + 3, gy - 1, cs.x - 6, 1, SandWorld.M_DIRT)
+		# Hollow coffin: a wood shell, big enough for an adult laid out.
+		var cr := Rect2i(gx, gy + depth, cs.x, cs.y)
 		w.fill_rect(cr.position.x, cr.position.y, cr.size.x, cr.size.y, SandWorld.M_WOOD)
 		w.fill_rect(cr.position.x + 1, cr.position.y + 1, cr.size.x - 2, cr.size.y - 2, SandWorld.M_EMPTY)
-		w.fill_rect(cr.position.x + 2, cr.end.y - 2, cr.size.x - 4, 1, SandWorld.M_BONE)
+		coffins.append(cr)
 		graves.append(Vector2i(cr.position.x + cr.size.x / 2, cr.position.y + cr.size.y / 2))
+		deepest = maxi(deepest, cr.end.y)
+	graveyard = Rect2i(x0, gy - 16, gw, deepest - (gy - 16) + 2)
+	# A dead tree watches over the plot.
+	_tree_dead(x0 + gw - 4, gy, rng.randi_range(40, 52), false)
+
+
+## A headstone on the ground line (scenery): rounded slab, carved cross slab, or wooden cross.
+func _tombstone(x: int, base_y: int) -> void:
+	var kind := rng.randi_range(0, 2)
+	var th := rng.randi_range(9, 13)
+	var lean := rng.randi_range(-1, 1) if rng.randf() < 0.4 else 0
+	if kind == 2:
+		_sc_rect(x + 2, base_y - th, 2, th + 1, PAL.dead)
+		_sc_rect(x, base_y - th + 3, 6, 2, PAL.dead)
+		tombstones.append(Rect2i(x, base_y - th, 6, th + 1))
+		return
+	for yy in range(0, th + 1):
+		var y := base_y - yy
+		var off := (lean * yy) / 6
+		var inset := 0
+		if kind == 0 and yy >= th - 1:
+			inset = 1 if yy == th - 1 else 2
+		for xx in range(inset, 6 - inset):
+			var c := _tone(PAL.stone, x + xx, y)
+			if yy < 3 and _hash(x + xx, y) % 3 == 0:
+				c = PAL.moss[_hash(x, y + xx) % 2]
+			var cross_v := (xx == 2 or xx == 3) and yy >= th - 7 and yy <= th - 2
+			var cross_h := yy == th - 4 and xx >= 1 and xx <= 4
+			if kind == 1 and (cross_v or cross_h):
+				c = c.darkened(0.35)
+			_sc(x + xx + off, y, c)
+	tombstones.append(Rect2i(x - 1, base_y - th, 8, th + 1))
+
+
+# ---------------------------------------------------------------- old battlefield teaser
+
+## Rusted pikes and a torn banner on a rise in the right-hand forest, with old bones in the soil beneath.
+func _battlefield() -> void:
+	var x0 := width / 2 + 150
+	var x1 := mini(x0 + 90, int(flat_spans[1][0]) - int(GEN.blend) - 10)
+	if x1 - x0 < 40:
+		return
+	var top := 1 << 30
+	for x in range(x0, x1):
+		top = mini(top, heights[x])
+	battlefield = Rect2i(x0, top - 30, x1 - x0, 70)
+	for i in 6:
+		var x := rng.randi_range(x0 + 4, x1 - 4)
+		var gy := heights[x]
+		var lean := rng.randi_range(-3, 3)
+		var ph := rng.randi_range(12, 20)
+		for k in ph:
+			_sc(x + (lean * k) / ph, gy - k, _tone(PAL.dead, x, gy - k))
+		_sc(x + lean, gy - ph, PAL.rust[2])
+		_sc(x + lean, gy - ph - 1, PAL.rust[0])
+		if i == 2:
+			_sc_rect(x + lean + 1, gy - ph, 6, 4, PAL.blanket)
+			_sc_rect(x + lean + 1, gy - ph + 4, 3, 2, PAL.blanket)
+	for i in 8:
+		var x := rng.randi_range(x0, x1)
+		var y := heights[x] + rng.randi_range(6, 26)
+		w.fill_rect(x, y, rng.randi_range(4, 7), 1, SandWorld.M_BONE)
+		w.paint_circle(x + 2, y + 2, 2, SandWorld.M_BONEBIT, false)
 
 
 # ---------------------------------------------------------------- forest
-
-func _trees() -> void:
-	var x := 6
-	var mid := width / 2
-	while x < width - 6:
-		x += rng.randi_range(GEN.tree_spacing[0], GEN.tree_spacing[1])
-		if x >= width - 6 or _in_flat(x, 6) or absi(x - mid) < GEN.spawn_clearing:
-			continue
-		_tree(x, heights[x])
-
 
 func _in_flat(x: int, pad: int) -> bool:
 	for span in flat_spans:
@@ -305,23 +570,155 @@ func _in_flat(x: int, pad: int) -> bool:
 	return false
 
 
-func _tree(x: int, gy: int) -> void:
-	var h := rng.randi_range(26, 48)
-	var tw := 2 if h < 36 else 3
-	w.fill_rect(x, gy - h, tw, h, SandWorld.M_WOOD)
-	# Roots into the turf.
-	w.set_mat(x - 1, gy - 1, SandWorld.M_WOOD)
-	w.set_mat(x + tw, gy - 1, SandWorld.M_WOOD)
-	# Canopy: a few overlapping leaf blobs, darker forest, sometimes a bare dead tree.
-	if rng.randf() < 0.15:
-		w.fill_rect(x - 5, gy - h + 8, 5, 1, SandWorld.M_WOOD)
-		w.fill_rect(x + tw, gy - h + 12, 6, 1, SandWorld.M_WOOD)
-		return
-	var cy := gy - h
-	var r := rng.randi_range(7, 11)
-	w.paint_circle(x + tw / 2, cy, r, SandWorld.M_LEAVES, true)
-	w.paint_circle(x + tw / 2 - r / 2 - 1, cy + 4, r - 2, SandWorld.M_LEAVES, true)
-	w.paint_circle(x + tw / 2 + r / 2 + 1, cy + 4, r - 2, SandWorld.M_LEAVES, true)
+## A darker row of trees further back, always scenery: depth for the forest silhouette.
+func _far_trees() -> void:
+	var x := 0
+	while true:
+		x += rng.randi_range(TREES.far_spacing[0], TREES.far_spacing[1])
+		if x >= width - 2:
+			break
+		var gy := heights[x] + 2
+		var h := rng.randi_range(40, 70)
+		_sc_rect(x, gy - h, 2, h, [PAL.far[3]])
+		if rng.randf() < 0.5:
+			for t in 5:
+				var half := 3 + t * 3
+				_sc_rect(x + 1 - half, gy - h + t * 8, half * 2, 9, PAL.far)
+		else:
+			_blob(x + 1, gy - h + 6, rng.randi_range(9, 14), PAL.far, PAL.far, false)
+
+
+func _trees() -> void:
+	var x := 6
+	var mid := width / 2
+	while x < width - 6:
+		x += rng.randi_range(TREES.spacing[0], TREES.spacing[1])
+		if x >= width - 6 or _in_flat(x, 8) or absi(x - mid) < GEN.spawn_clearing:
+			continue
+		var gy := heights[x]
+		var h := rng.randi_range(TREES.height[0], TREES.height[1])
+		var roll := rng.randf()
+		if roll < TREES.dead_chance:
+			_tree_dead(x, gy, h, trees_in_sim)
+		elif roll < TREES.dead_chance + TREES.pine_chance:
+			_tree_pine(x, gy, h, trees_in_sim)
+		else:
+			_tree_oak(x, gy, h, trees_in_sim)
+		if rng.randf() < TREES.bush_chance:
+			var bx := x + rng.randi_range(5, 10) * (1 if rng.randf() < 0.5 else -1)
+			if bx > 4 and bx < width - 4 and not _in_flat(bx, 4) and absi(bx - mid) >= GEN.spawn_clearing:
+				_blob(bx, heights[bx] - 2, rng.randi_range(3, 5), PAL.leaf, PAL.leaf_lit, trees_in_sim)
+
+
+func _wood(x: int, y: int, pal: Array, in_sim: bool) -> void:
+	if in_sim:
+		if w.in_bounds(x, y) and w.is_empty(x, y):
+			w.set_mat(x, y, trunk_mat)
+	else:
+		_sc(x, y, _tone(pal, x, y))
+
+
+## A trunk rooted a few cells into the ground (hidden behind the turf), flared at the foot.
+func _trunk(x: int, gy: int, h: int, tw: int, pal: Array, in_sim: bool) -> void:
+	for k in h + 3:
+		var y := gy + 3 - k
+		var flare := 1 if k < 5 else 0
+		var ww := tw + 2 * flare if k < 5 else (tw if k < h * 2 / 3 else maxi(1, tw - 1))
+		for dx in ww:
+			_wood(x - flare + dx, y, pal, in_sim)
+
+
+func _branch(x: int, y: int, dir: int, length: int, rise: int, pal: Array, in_sim: bool) -> Vector2i:
+	var p := Vector2i(x, y)
+	for k in length:
+		p = Vector2i(x + dir * k, y - (k * rise) / length)
+		_wood(p.x, p.y, pal, in_sim)
+	return p
+
+
+## A leafy blob with a ragged edge, lighter on its upper left. Into the sim as LEAVES when trees are.
+func _blob(cx: int, cy: int, r: int, pal: Array, lit: Array, in_sim: bool) -> void:
+	for y in range(cy - r, cy + r + 1):
+		for x in range(cx - r, cx + r + 1):
+			var dx := x - cx
+			var dy := y - cy
+			if dx * dx + dy * dy > r * r - (_hash(x, y) % (r + 1)):
+				continue
+			if in_sim:
+				if w.in_bounds(x, y) and w.is_empty(x, y):
+					w.set_mat(x, y, SandWorld.M_LEAVES)
+				continue
+			var light := (-dx - dy * 1.5) / float(r)
+			var c := _tone(lit if light > 0.6 else pal, x, y)
+			if light < -0.9:
+				c = c.darkened(0.25)
+			_sc(x, y, c)
+
+
+func _tree_oak(x: int, gy: int, h: int, in_sim: bool) -> void:
+	var tw := 3 if h > 60 else 2
+	_trunk(x, gy, h, tw, PAL.bark, in_sim)
+	var top := gy - h
+	var r := rng.randi_range(10, 14)
+	var crown := Vector2i(x + tw / 2, top + r / 2) # canopy centre, low enough to swallow the trunk's top
+	# Branches fork out under the crown and end in their own clumps.
+	var ends: Array = []
+	for b in rng.randi_range(2, 3):
+		var by := top + r + rng.randi_range(0, maxi(2, h / 5))
+		var dir := -1 if b % 2 == 0 else 1
+		ends.append(_branch(x + (tw if dir > 0 else -1), by, dir, rng.randi_range(7, 12), rng.randi_range(5, 9), PAL.bark, in_sim))
+	# A crown of overlapping clumps: darker ones first (behind), lit ones on top.
+	for k in rng.randi_range(4, 6):
+		var off := Vector2i(rng.randi_range(-r, r), rng.randi_range(-r / 2, r / 2))
+		_blob(crown.x + off.x, crown.y + off.y + 2, r - rng.randi_range(3, 6), PAL.leaf, PAL.leaf, in_sim)
+	for e in ends:
+		_blob(e.x, e.y - 2, r - rng.randi_range(3, 5), PAL.leaf, PAL.leaf_lit, in_sim)
+	_blob(crown.x, crown.y - r / 3, r, PAL.leaf, PAL.leaf_lit, in_sim)
+
+
+func _tree_pine(x: int, gy: int, h: int, in_sim: bool) -> void:
+	_trunk(x, gy, h, 2, PAL.bark, in_sim)
+	var top := gy - h - 4
+	var tiers := maxi(4, h / 10)
+	for t in tiers:
+		var ty := top + t * 7
+		var half := 3 + t * 2
+		for k in 9:
+			var span := half * k / 8
+			var py := ty + k
+			if py >= gy - 8:
+				continue
+			for dx in range(-span, span + 2):
+				var px := x + dx
+				if in_sim:
+					if w.in_bounds(px, py) and w.is_empty(px, py):
+						w.set_mat(px, py, SandWorld.M_LEAVES)
+				else:
+					var c := _tone(PAL.pine, px, py)
+					if dx < 0 and k < 5:
+						c = c.lightened(0.08)
+					_sc(px, py, c)
+
+
+func _tree_dead(x: int, gy: int, h: int, in_sim: bool) -> void:
+	_trunk(x, gy, h, 2, PAL.dead, in_sim)
+	var top := gy - h
+	for b in rng.randi_range(2, 4):
+		var by := top + rng.randi_range(2, maxi(4, h / 2))
+		var dir := -1 if b % 2 == 0 else 1
+		var e := _branch(x + (2 if dir > 0 else -1), by, dir, rng.randi_range(5, 12), rng.randi_range(4, 9), PAL.dead, in_sim)
+		_wood(e.x + dir, e.y - 1, PAL.dead, in_sim)
+
+
+func _grass_tufts() -> void:
+	for x in range(1, width - 1):
+		if rng.randf() > TREES.tuft_chance:
+			continue
+		var gy := heights[x]
+		if not w.is_empty(x, gy - 1) or w.get_mat(x, gy) != SandWorld.M_GRASS:
+			continue
+		for k in rng.randi_range(1, 3):
+			_sc(x, gy - 1 - k, _tone(PAL.grass, x, gy - k))
 
 
 func _critter_zones() -> void:

@@ -1,31 +1,34 @@
 class_name Settlements
 extends Node
 ## The `settlements` hook: the towns' homes and who lives in them.
-## A home whose residents have all died decays (walls knocked out); after a while a new family moves in
-## and the home is rebuilt. Threats and Bodies and Souls call resident_died() and home_at().
+## When a home's last resident dies it runs down (holes in the roof and walls, the fire out), and after a
+## while it is a ruin. Short-handed homes slowly take in newcomers, one at a time; when someone moves
+## into a ruin it is rebuilt. Threats and Bodies and Souls call resident_died() and home_at();
+## Bodies and Souls listens to resident_arrived to put a new human in the home.
+
+signal home_emptied(home: Dictionary) ## the last resident died; the home starts to decay
+signal resident_arrived(home: Dictionary) ## a newcomer moved in (home.alive already counts them)
 
 const HOMES := {
-	"refill_hours": 36.0, ## game hours an emptied home stays a ruin before a new family arrives
-	"refill_check_seconds": 2.0,
+	"ruin_hours": 12.0, ## game hours after emptying before a home is a ruin
+	"newcomer_hours": 24.0, ## game hours between newcomers to a short-handed home (one game day = 12 real minutes)
 }
 
 var gen: WorldGen
 var towns: Array = [] ## pixel-space copy handed out through info.towns
-var _homes := {} ## id -> {id, rect(px), rect_cells, residents, alive, emptied_at(hours elapsed), town}
+var _homes := {} ## id -> {id, rect(px), rect_cells, residents, alive, door_side, decay, emptied_at, short_since, town}
 var _hours_elapsed := 0.0
 var _last_hour := -1.0
-var _accum := 0.0
 
 
 func _init(world_gen: WorldGen = null) -> void:
-	gen = world_gen
 	name = "Settlements"
+	if world_gen != null:
+		setup(world_gen)
 
 
 func _ready() -> void:
 	add_to_group("settlements")
-	if gen != null and towns.is_empty():
-		setup(gen)
 	Events.time_of_day_changed.connect(_on_time)
 
 
@@ -38,9 +41,9 @@ func setup(world_gen: WorldGen) -> void:
 		var homes_px: Array[Dictionary] = []
 		for h in t.homes:
 			var r: Rect2i = h.rect
-			var rp := Rect2(Vector2(r.position) * c, Vector2(r.size) * c)
-			var rec := {"id": h.id, "rect": rp, "rect_cells": r, "residents": h.residents, "alive": h.alive,
-				"emptied_at": -1.0, "town": t.name}
+			var rec := {"id": h.id, "rect": Rect2(Vector2(r.position) * c, Vector2(r.size) * c), "rect_cells": r,
+				"residents": h.residents, "alive": h.alive, "door_side": h.door_side, "decay": 0,
+				"emptied_at": -1.0, "short_since": -1.0, "town": t.name}
 			_homes[h.id] = rec
 			homes_px.append(_public(rec))
 		var tr: Rect2i = t.rect
@@ -49,7 +52,15 @@ func setup(world_gen: WorldGen) -> void:
 
 
 func _public(rec: Dictionary) -> Dictionary:
-	return {"id": rec.id, "rect": rec.rect, "residents": rec.residents, "alive": rec.alive}
+	return {"id": rec.id, "rect": rec.rect, "residents": rec.residents, "alive": rec.alive,
+		"door": _door_px(rec), "town": rec.town}
+
+
+## Where the door is, at floor level, in pixels (handy for walking residents home).
+func _door_px(rec: Dictionary) -> Vector2:
+	var r: Rect2 = rec.rect
+	var x := r.end.x - Sim.CELL if rec.door_side > 0 else r.position.x + Sim.CELL
+	return Vector2(x, r.end.y)
 
 
 ## Every home, with its current living count. Fresh dictionaries; changing them changes nothing.
@@ -68,12 +79,13 @@ func resident_died(home_id: int) -> void:
 	if rec.alive <= 0:
 		return
 	rec.alive -= 1
+	if rec.short_since < 0.0:
+		rec.short_since = _hours_elapsed
 	_sync_towns(rec)
 	if rec.alive == 0:
 		rec.emptied_at = _hours_elapsed
-		if Sim.world != null:
-			gen.w = Sim.world
-			gen.build_home(rec.rect_cells, true)
+		_rebuild(rec, 1)
+		home_emptied.emit(_public(rec))
 
 
 ## The home containing this pixel position, or {} if none.
@@ -85,10 +97,15 @@ func home_at(pos: Vector2) -> Dictionary:
 	return {}
 
 
+## 0 lived in, 1 emptied and running down, 2 a ruin.
+func decay_of(home_id: int) -> int:
+	return _homes[home_id].decay if _homes.has(home_id) else 0
+
+
 ## Move the clock along without the Events signal (tests use this).
 func advance_hours(h: float) -> void:
 	_hours_elapsed += h
-	_check_refill()
+	_check()
 
 
 func _on_time(hour: float, _night: bool) -> void:
@@ -98,19 +115,36 @@ func _on_time(hour: float, _night: bool) -> void:
 			d += 24.0
 		_hours_elapsed += d
 	_last_hour = hour
-	_check_refill()
+	_check()
 
 
-func _check_refill() -> void:
+func _check() -> void:
 	for id in _homes:
 		var rec: Dictionary = _homes[id]
-		if rec.alive == 0 and rec.emptied_at >= 0.0 and _hours_elapsed - rec.emptied_at >= HOMES.refill_hours:
-			rec.alive = rec.residents
-			rec.emptied_at = -1.0
-			if Sim.world != null:
-				gen.w = Sim.world
-				gen.build_home(rec.rect_cells, false)
+		if rec.alive == 0 and rec.decay == 1 and _hours_elapsed - rec.emptied_at >= HOMES.ruin_hours:
+			_rebuild(rec, 2)
+		while rec.short_since >= 0.0 and _hours_elapsed - rec.short_since >= HOMES.newcomer_hours:
+			rec.short_since += HOMES.newcomer_hours
+			rec.alive += 1
+			if rec.decay > 0:
+				_rebuild(rec, 0)
+				rec.emptied_at = -1.0
+			if rec.alive >= rec.residents:
+				rec.alive = rec.residents
+				rec.short_since = -1.0
 			_sync_towns(rec)
+			resident_arrived.emit(_public(rec))
+
+
+func _rebuild(rec: Dictionary, decay: int) -> void:
+	rec.decay = decay
+	if Sim.world == null or gen == null:
+		return
+	gen.w = Sim.world
+	gen.build_home(rec.rect_cells, decay, rec.door_side)
+	if is_inside_tree():
+		for s in get_tree().get_nodes_in_group("world_scenery"):
+			s.refresh()
 
 
 func _sync_towns(rec: Dictionary) -> void:
