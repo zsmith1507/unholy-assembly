@@ -95,12 +95,15 @@ func _on_death(_killer: Node2D) -> void:
 	_drop_carry()
 	if job.has("id"):
 		Jobs.release(job.id)
-	if not GameState.in_heart_range(global_position):
-		var sp := Lair.flesh_spawner(get_tree())
-		if sp != null and sp.has_method("spawn_soul_orb"):
-			var orb = sp.spawn_soul_orb(global_position - Vector2(0, 20), 1.0, display_name)
-			if orb != null:
-				Events.soul_orb_dropped.emit(orb)
+	# The soul it was raised with comes back out: inside the heart's range the orb drifts home by itself,
+	# outside it fades unless the necromancer fetches it.
+	var outside := not GameState.in_heart_range(global_position)
+	var sp := Lair.flesh_spawner(get_tree())
+	if sp != null and sp.has_method("spawn_soul_orb"):
+		var orb = sp.spawn_soul_orb(global_position - Vector2(0, 20), 1.0, display_name)
+		if orb != null and outside:
+			Events.soul_orb_dropped.emit(orb)
+	if outside:
 		LairText.say("minion_soul_lost", &"concerned")
 	GameState.count("minions_lost")
 	queue_free()

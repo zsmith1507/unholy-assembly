@@ -19,7 +19,7 @@ const MORALE := {
 	"strike_below": 12.0,
 	"strike_over_above": 45.0,
 	"slowdown_speed": 0.5,
-	"visit_bonus": 40.0, # the necromancer's motivational visit (interact with a striker)
+	"visit_bonus": 50.0, # the necromancer's motivational visit (interact with a striker)
 }
 
 var layers := {} ## name -> Node for "buildings", "items", "actors", "fx"

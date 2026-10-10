@@ -61,6 +61,8 @@ static func item_free(item: Object) -> bool:
 		return false
 	if item.get("carrier") != null:
 		return false
+	if item.get("interred") == true: # a graveyard body still in its coffin: Harvest frees it first
+		return false
 	var r = item.get("reserved_by")
 	return r == null or not is_instance_valid(r)
 
