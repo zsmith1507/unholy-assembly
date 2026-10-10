@@ -43,6 +43,9 @@ const CHAPEL := {"width": 60, "wall_h": 46, "roof_h": 14, "steeple_h": 24, "door
 ## Coffins hold a laid-out adult (about 52 px, 26 cells long).
 const GRAVES := {"count": 6, "pitch": 38, "coffin": Vector2i(34, 8), "depth": [10, 15], "margin": 8}
 
+## A forgotten catacomb gallery under the left forest: a taste of the deep.
+const CATACOMB := {"size": Vector2i(90, 16), "depth": 250, "offset_x": 200}
+
 const TREES := {
 	"spacing": [12, 26], ## cells between trunks
 	"height": [44, 80], ## cells
@@ -96,6 +99,7 @@ var coffins: Array = [] ## Rect2i in cells
 var tombstones: Array = [] ## Rect2i in cells (scenery)
 var critter_zones: Array = [] ## Rect2i in cells
 var battlefield := Rect2i() ## the old battlefield teaser, in cells
+var catacomb := Rect2i() ## the forgotten catacomb teaser deep in the stone, in cells
 var spawn_cell := Vector2i()
 
 
@@ -122,6 +126,7 @@ func generate(world: SandWorld, seed: int) -> void:
 	_towns()
 	_graveyard()
 	_battlefield()
+	_catacomb()
 	_trees()
 	_grass_tufts()
 	spawn_cell = Vector2i(width / 2, heights[width / 2])
@@ -559,6 +564,28 @@ func _battlefield() -> void:
 		var y := heights[x] + rng.randi_range(6, 26)
 		w.fill_rect(x, y, rng.randi_range(4, 7), 1, SandWorld.M_BONE)
 		w.paint_circle(x + 2, y + 2, 2, SandWorld.M_BONEBIT, false)
+
+
+## A teaser of the deep: a forgotten catacomb gallery in the stone under the left forest. Brick shell,
+## bones heaped on the floor and laid in wall niches, one end caved in.
+func _catacomb() -> void:
+	var cw: int = CATACOMB.size.x
+	var ch: int = CATACOMB.size.y
+	var x := width / 2 - CATACOMB.offset_x - cw / 2
+	var y := heights[x + cw / 2] + CATACOMB.depth
+	catacomb = Rect2i(x, y, cw, ch)
+	w.fill_rect(x - 3, y - 3, cw + 6, ch + 6, SandWorld.M_BRICK)
+	w.fill_rect(x, y, cw, ch, SandWorld.M_EMPTY)
+	# Niches in the back wall are scenery-dark; bones lie in shelves cut into the brick above the floor.
+	for nx in range(x + 4, x + cw - 10, 12):
+		w.fill_rect(nx, y + 3, 8, 3, SandWorld.M_EMPTY)
+		w.fill_rect(nx + 1, y + 5, 6, 1, SandWorld.M_BONE)
+	_sc_rect(x, y, cw, ch, PAL.chapel_wall)
+	for i in 10:
+		w.paint_circle(rng.randi_range(x + 4, x + cw - 4), y + ch - 1, rng.randi_range(1, 3), SandWorld.M_BONEBIT, false)
+	w.fill_rect(x, y + ch, cw, 1, SandWorld.M_BRICK)
+	# The far end has caved in.
+	w.paint_circle(x + cw - 6, y + ch / 2, 9, SandWorld.M_RUBBLE, false)
 
 
 # ---------------------------------------------------------------- forest

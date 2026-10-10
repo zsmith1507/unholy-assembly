@@ -54,6 +54,7 @@ func install(main: Node, _info: Dictionary) -> Variant:
 		"world_seed": seed,
 		"settlements": settlements,
 		"battlefield": _px(gen.battlefield),
+		"catacomb": _px(gen.catacomb),
 	}
 
 
