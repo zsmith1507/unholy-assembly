@@ -13,12 +13,18 @@ const SPAWN := {
 	"restock_seconds": 25.0, ## one missing critter comes back this often
 	"restock_min_px": 420.0, ## never pops in closer than this to the necromancer
 	"ground_search_px": 160.0, ## how far up or down to look for footing when placing someone
+	"farmer_share": 0.5, ## share of residents who are farmers (they work the fields outside town)
+	"field_px": [60.0, 220.0], ## how far outside the town edge a farmer's field lies
+	"census_seconds": 5.0, ## how often to check for homes a new family has moved into
 }
 
 var actors_layer: Node = null
 var items_layer: Node = null
 var critter_zones: Array = [] ## Array[Rect2], pixels
+var towns: Array = [] ## info.towns (World keeps each home's `alive` count current)
 var _restock := 0.0
+var _census := 0.0
+var _resident_n := 0
 
 
 func _init() -> void:
@@ -106,9 +112,58 @@ static func find_footing(at: Vector2, clear_px: float = 40.0) -> Vector2:
 	return p
 
 
+# ---------------------------------------------------------------- townsfolk
+
+## One adult resident of `home` (World's home dictionary) in `town`. Farmers work fields outside town;
+## villagers potter about inside it. They start at home.
+func spawn_resident(town: Dictionary, home: Dictionary, index: int = 0) -> Human:
+	_resident_n += 1
+	var farmer := fmod(_resident_n * SPAWN.farmer_share, 1.0) < SPAWN.farmer_share - 0.001
+	var r: Rect2 = home.rect
+	var trect: Rect2 = town.get("rect", r)
+	var x := r.get_center().x + (index - 1) * 6.0
+	var feet := find_footing(Vector2(x, r.end.y - 4.0))
+	var work := Vector2(randf_range(trect.position.x, trect.end.x), feet.y)
+	if farmer:
+		var side: int = town.get("side", 1)
+		var edge := trect.position.x if side < 0 else trect.end.x
+		var fx := edge + float(side if side != 0 else 1) * randf_range(SPAWN.field_px[0], SPAWN.field_px[1])
+		work = Vector2(fx, feet.y)
+	var hu := spawn_human(&"farmer" if farmer else &"villager", feet) as Human
+	hu.set_home(int(home.id), r, feet, work)
+	return hu
+
+
+## Homes World has refilled (a new family moved in) get their residents.
+func census() -> int:
+	var living := {}
+	for h in get_tree().get_nodes_in_group(&"human_actors"):
+		if h is Human and not h.dead and h.home_id >= 0:
+			living[h.home_id] = int(living.get(h.home_id, 0)) + 1
+	var alive := {} ## home id -> living count, from World's settlements when it is there
+	var st := get_tree().get_first_node_in_group(&"settlements")
+	if st != null and st.has_method("homes"):
+		for home in st.homes():
+			alive[int(home.id)] = int(home.get("alive", 0))
+	var added := 0
+	for t in towns:
+		for home in t.get("homes", []):
+			var want := int(alive.get(int(home.id), home.get("alive", 0)))
+			var have := int(living.get(int(home.id), 0))
+			for i in range(have, want):
+				spawn_resident(t, home, i)
+				added += 1
+	return added
+
+
 # ---------------------------------------------------------------- restocking the forest
 
 func _physics_process(delta: float) -> void:
+	if not towns.is_empty():
+		_census += delta
+		if _census >= SPAWN.census_seconds:
+			_census = 0.0
+			census()
 	if critter_zones.is_empty():
 		return
 	_restock += delta

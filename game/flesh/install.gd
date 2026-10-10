@@ -4,8 +4,6 @@ extends RefCounted
 ## Returns {"flesh_spawner": node}.
 
 const INSTALL := {
-	"farmer_share": 0.5, ## share of residents who are farmers (they work the fields outside town)
-	"field_px": [60.0, 220.0], ## how far outside the town edge a farmer's field lies
 	"grave_looks": ["villager", "farmer"],
 }
 
@@ -15,6 +13,7 @@ func install(main: Node, info: Dictionary) -> Variant:
 	sp.actors_layer = _layer(main, "actors")
 	sp.items_layer = _layer(main, "items")
 	sp.critter_zones = info.get("critter_zones", [])
+	sp.towns = info.get("towns", [])
 	main.add_child(sp)
 	spawn_residents(sp, info.get("towns", []))
 	bury_graves(sp, info.get("graves", []))
@@ -30,28 +29,10 @@ static func _layer(main: Node, n: String) -> Node:
 ## One human per living resident of every home. They start at home (the run opens at dusk).
 static func spawn_residents(sp: FleshSpawner, towns: Array) -> Array:
 	var out: Array = []
-	var n := 0
 	for t in towns:
-		var trect: Rect2 = t.get("rect", Rect2())
-		var side: int = t.get("side", 1)
 		for h in t.get("homes", []):
-			var r: Rect2 = h.rect
 			for i in int(h.get("alive", h.get("residents", 1))):
-				n += 1
-				var farmer := fmod(n * INSTALL.farmer_share, 1.0) < INSTALL.farmer_share - 0.001
-				var kind := &"farmer" if farmer else &"villager"
-				var x := r.get_center().x + (i - 1) * 6.0
-				var feet := FleshSpawner.find_footing(Vector2(x, r.end.y - 4.0))
-				var work := Vector2(randf_range(trect.position.x, trect.end.x), feet.y)
-				if farmer:
-					# fields lie on the far side of town from the forest
-					var edge := trect.position.x if side < 0 else trect.end.x
-					var out_dir := -1.0 if side < 0 else 1.0
-					var fx := edge + out_dir * randf_range(INSTALL.field_px[0], INSTALL.field_px[1])
-					work = Vector2(fx, feet.y)
-				var hu := sp.spawn_human(kind, feet) as Human
-				hu.set_home(int(h.id), r, feet, work)
-				out.append(hu)
+				out.append(sp.spawn_resident(t, h, i))
 	return out
 
 
