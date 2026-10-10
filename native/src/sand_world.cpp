@@ -780,6 +780,7 @@ inline void rgb_of(uint32_t c, float &r, float &g, float &b) {
 inline uint8_t clamp8(float v) {
 	return v <= 0 ? 0 : (v >= 255 ? 255 : (uint8_t)v);
 }
+constexpr int MAXV_STREAK = 6;
 inline int fire_idx(int l, float hv, uint32_t f) {
 	int k = l > 22 ? 1 : l > 12 ? 2 : l > 6 ? 3 : l > 2 ? 4 : 5;
 	if (hv > 40 && k > 0) {
@@ -910,6 +911,36 @@ void SandWorld::render_region(const Ref<Image> &image, int x0, int y0) {
 			o[1] = clamp8(g * f);
 			o[2] = clamp8(b * f);
 			o[3] = alpha;
+		}
+	}
+	// liquid falling through the air jumps several cells a tick; draw the gap it just crossed as a fading streak so a
+	// pour reads as a stream rather than dashes
+	for (int yy = 1; yy < ih; yy++) {
+		int wy = y0 + yy;
+		if (wy < 1 || wy >= h) {
+			continue;
+		}
+		for (int xx = 0; xx < iw; xx++) {
+			int wx = x0 + xx;
+			if (wx < 0 || wx >= w) {
+				continue;
+			}
+			int i = idx(wx, wy);
+			if (plg[i] != 255 || fvy[i] < 1.5f || md(mat[i]).kind != K_LIQUID) {
+				continue;
+			}
+			const uint8_t *src = p + ((size_t)yy * iw + xx) * 4;
+			int len = std::min(MAXV_STREAK, (int)fvy[i] - 1);
+			for (int k = 1; k <= len && yy - k >= 0; k++) {
+				uint8_t *o = p + ((size_t)(yy - k) * iw + xx) * 4;
+				if (o[3] == 255 || !is_open_i(i - k * w)) {
+					break;
+				}
+				o[0] = src[0];
+				o[1] = src[1];
+				o[2] = src[2];
+				o[3] = (uint8_t)(230 - k * 150 / (len + 1));
+			}
 		}
 	}
 	// airborne droplets and grains

@@ -57,7 +57,8 @@ func _build() -> void:
 	w.fill_rect(34, 113, 32, 10, M.M_FLESH)
 	# bones and a slab of earth overhanging the basin that the opening will cut loose
 	w.fill_rect(80, 130, 20, 4, M.M_BONE)
-	w.fill_rect(110, 90, 40, 14, M.M_EARTH)
+	w.fill_rect(110, 90, 10, 5, M.M_EARTH)
+	w.fill_rect(120, 90, 40, 14, M.M_EARTH)
 	# a pocket of miasma under the right bank, sand and snow drifts
 	w.fill_rect(250, 130, 30, 12, M.M_EMPTY)
 	w.fill_rect(250, 130, 30, 12, M.M_MIASMA)
@@ -74,8 +75,8 @@ func _script() -> void:
 		w.fill_rect(60, 10, 3, 2, M.M_ASH)
 		w.fill_rect(80, 10, 3, 2, M.M_FLESH)
 	if frame == 40:
-		for y in range(88, 106):
-			w.dig(108, y, 2, 10.0)
+		for y in range(88, 97):
+			w.dig(115, y, 2, 10.0)
 	if frame == 60:
 		w.ignite(265, 99, 4)
 	if frame == 90:
