@@ -11,6 +11,8 @@ const STOCKPILE_ALIASES := {
 	&"flesh_pit": &"gibs",
 	&"larder": &"meat",
 	&"morgue": &"stitched_body",
+	&"corpses": &"corpse", # the spell's "corpse pile": refused, raw flesh goes to the grinder first
+	&"parts": &"part",
 }
 
 
