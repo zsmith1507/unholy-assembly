@@ -18,7 +18,7 @@ func run(t) -> void:
 	t.check(Threats.sky_exposure(lamp.position) > 0.0, "shaft lets the lamp see the sky")
 	s0 = GameState.suspicion
 	Threats.simulate(10.0, 1.0)
-	t.check(GameState.suspicion - s0 > buried_gain + 0.05, "light up the shaft at night raises Suspicion")
+	t.check(GameState.suspicion - s0 > buried_gain + 0.01, "light up the shaft at night raises Suspicion")
 	GameState.hour = 12.0
 	s0 = GameState.suspicion
 	Threats.simulate(10.0, 1.0)

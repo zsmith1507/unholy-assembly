@@ -12,8 +12,9 @@ extends Node
 ## shows each change and why, from `ledger`.
 ##
 ## Noise contract for other departments: emit Events.noise_made(at, loudness, source) about once a second
-## while something is loud, not every tick. Loudness: 1 = a ghoul digging, 3 = a machine working,
-## 10 = an explosion. `source` is a short word shown in the overlay ("grinder", "ghoul digging").
+## while something is loud, not every tick. Loudness as the departments use it: 0.08 a ghoul at work,
+## 0.15-0.25 a stitching table or altar, 0.7 the grinder, up to 1.0 the Dig spell in stone; an explosion
+## may go past 1. `source` is a short word shown in the overlay ("grinder", "ghoul").
 
 signal ledger_changed ## a new line in the ledger (the overlay listens)
 signal noise_heard(surface_point: Vector2, audible: float, source: String) ## noise that reached the surface
@@ -25,6 +26,7 @@ signal depth_tier_reached(tier: int, tier_name: String)
 signal hunger_level_crossed(level: float) ## 25, 50, 75 on the way up
 signal suspicion_level_crossed(level: float)
 signal raid_started(at: Vector2)
+signal grave_found(at: Vector2) ## a robbed grave was noticed; patrols start watching the graveyard
 
 # ================================================================ tuning (Zach: change numbers here)
 
@@ -40,6 +42,7 @@ const SUSPICION := {
 	"town_margin_px": 160.0, # how close to a town counts as "in town"
 	"grave_robbed": 1.5, # once the robbed grave is noticed
 	"grave_discover_s": 90.0, # how long until someone notices a robbed grave
+	"grave_wood_left": 0.4, # fallback check: a grave with less than this share of its wood/bone left was robbed
 	"alarm_in_earshot": 1.0, # a patrol shouting close enough to a town to be heard
 	"alarm_earshot_px": 320.0,
 	"levels": [25.0, 50.0, 75.0], # Eyegor's warnings, patrols searching, etc.
@@ -112,6 +115,13 @@ const WITNESS := {
 	"repeat_s": 20.0, # the same witness seeing the same thing again within this is ignored
 }
 
+## Moving house: a new heart placed far from the old one starts with less Suspicion.
+const RELOCATE := {
+	"share_per_1000px": 0.25, # share of Suspicion shed per 1000 px between the old heart and the new
+	"max_share": 0.75, # never sheds more than this
+	"min_px": 300.0, # closer than this counts as the same place
+}
+
 ## Culling towns: a few deaths at a time stay under the radar; a town shrinking fast spikes Suspicion.
 const CULL := {
 	"window_s": 300.0, # deaths are counted over this many seconds
@@ -157,13 +167,14 @@ const PATROL := {
 	"tunnel_check_every_s": 1.0,
 	"tunnel_look_px": 60.0, # how far around a farmer we look for a hole in the ground
 	"tunnel_depth_cells": 10, # a hole this deep below the natural surface is a tunnel mouth
-	"flee_fear": 0.6, # at or above this fear a farmer runs home instead of fighting
+	"flee_fear": 0.55, # at or above this fear a farmer runs home instead of fighting (matches Human.HUMAN.flee_fear)
 	"fear_on_ally_death": 0.25,
 	"flee_then_home_s": 3.0,
 	"search_at": 50.0, # from here patrols head for the heart's surface position
 	"search_jitter_px": [500.0, 60.0], # how far off their guess is at search_at and at 100
 	"raid_at": 85.0, # from here a patrol becomes a raid (stub)
 	"raid_extra": 2,
+	"graveyard_watches": 2, # after a robbed grave is found, this many patrols walk the graveyard instead
 	"use_stand_ins": true, # if Bodies and Souls has no flesh_spawner, use our own stand-in farmers
 }
 
@@ -190,7 +201,10 @@ var _timers := {}
 var _item_seen := {} ## instance id -> time first seen
 var _tile_seen := {} ## tile key -> time first smelly
 var _stench: Array = [] ## last computed sources
-var _graves: Array = [] ## {pos, base, robbed, found_at}
+var _graves: Array = [] ## {pos, base, robbed, found_at} (wood-counting fallback for graves without bodies)
+var _grave_bodies := {} ## instance id -> {node, pos, grave} for bodies in the `grave_corpses` group
+var _grave_found: Array = [] ## {at, found_at} robbed graves waiting to be noticed
+var _old_heart := Vector2.INF
 var _baseline := PackedInt32Array() ## natural surface per column, cells
 var _deaths := {} ## town index -> Array of death times
 var _report_seen := {} ## "witness:of" -> time
@@ -207,6 +221,8 @@ func _ready() -> void:
 	Events.dig_marked.connect(_on_dig_marked)
 	Events.suspicion_changed.connect(_on_suspicion_changed)
 	Events.hunger_changed.connect(_on_hunger_changed)
+	Events.heart_destroyed.connect(_on_heart_destroyed)
+	Events.heart_placed.connect(_on_heart_placed)
 
 
 ## Start (or restart) a run. install.gd calls this with World's info; tests call it with their own.
@@ -229,6 +245,9 @@ func reset() -> void:
 	_tile_seen.clear()
 	_stench.clear()
 	_graves.clear()
+	_grave_bodies.clear()
+	_grave_found.clear()
+	_old_heart = Vector2.INF
 	_baseline = PackedInt32Array()
 	_deaths.clear()
 	_report_seen.clear()
@@ -715,10 +734,15 @@ func _on_actor_died(actor: Node2D, killer: Node2D, at: Vector2) -> void:
 	if not _is_human(actor):
 		return
 	var t := town_near(at, SUSPICION.town_margin_px)
-	add_suspicion(SUSPICION.missing_resident, "missing", "%s went missing" % _who(actor))
-	if t >= 0:
-		if killer != null and is_instance_valid(killer) and not _is_human(killer):
-			add_suspicion(SUSPICION.settlement_attack, "attack", "an attack on %s" % _town_name(t))
+	var home_t := _home_town(actor)
+	var from := "" if home_t < 0 else " from %s" % _town_name(home_t)
+	add_suspicion(SUSPICION.missing_resident, "missing", "%s%s went missing" % [_who(actor), from])
+	if t >= 0 and killer != null and is_instance_valid(killer) and not _is_human(killer):
+		add_suspicion(SUSPICION.settlement_attack, "attack", "an attack on %s" % _town_name(t))
+	# the town they lived in shrinks (or, for a passer-by, the town they died in)
+	if home_t >= 0:
+		_town_death(home_t)
+	elif t >= 0:
 		_town_death(t)
 
 
@@ -735,6 +759,28 @@ func _town_death(t: int) -> void:
 	if spike > 0.0:
 		add_suspicion(spike, "cull", "%s is shrinking fast (%d of %d gone in %d min)" % [
 			_town_name(t), _recent(list), int(pop), roundi(CULL.window_s / 60.0)])
+
+
+## Index of the town a human lived in (World's homes know their town by name), or -1.
+func _home_town(actor: Node) -> int:
+	var hid = actor.get("home_id")
+	if hid == null or int(hid) < 0:
+		return -1
+	var s := get_tree().get_first_node_in_group("settlements")
+	if s == null or not s.has_method("homes"):
+		return -1
+	for h in s.homes():
+		if int(h.get("id", -1)) == int(hid):
+			return _town_index(String(h.get("town", "")))
+	return -1
+
+
+func _town_index(town_name: String) -> int:
+	var towns: Array = info.get("towns", [])
+	for i in towns.size():
+		if String(towns[i].get("name", "")) == town_name:
+			return i
+	return -1
 
 
 func _recent(list: Array) -> int:
@@ -755,9 +801,11 @@ func town_population(t: int) -> int:
 	var s := get_tree().get_first_node_in_group("settlements")
 	if s != null and s.has_method("homes"):
 		homes = []
+		var tname := String(towns[t].get("name", ""))
 		for h in s.homes():
 			var hr: Rect2 = h.get("rect", Rect2())
-			if rect.grow(8.0).intersects(hr):
+			var mine: bool = String(h.town) == tname if h.has("town") else rect.grow(8.0).intersects(hr)
+			if mine:
 				homes.append(h)
 	var n := 0
 	for h in homes:
@@ -765,28 +813,76 @@ func town_population(t: int) -> int:
 	return n if n > 0 else CULL.default_population
 
 
+## Robbed graves. Bodies of the dead are in the `grave_corpses` group (Bodies and Souls) until Harvest first
+## touches one; a body that leaves the group (or vanishes) means its grave was robbed. Graves with no
+## body node fall back to counting the coffin wood and bones around them.
 func _scan_graves() -> void:
-	var w := Sim.world
-	if w == null:
-		return
 	var graves: Array = info.get("graves", [])
-	if _graves.size() != graves.size():
+	var w := Sim.world
+	if w != null and _graves.size() != graves.size():
 		_graves.clear()
 		for g in graves:
-			_graves.append({"pos": g, "base": _grave_count(g), "robbed": false, "found_at": -1.0})
-	for g in _graves:
-		if g.robbed:
-			if g.found_at >= 0.0 and time >= g.found_at:
-				g.found_at = -1.0
-				add_suspicion(SUSPICION.grave_robbed, "grave", "someone found a robbed grave")
+			_graves.append({"pos": g, "base": _grave_count(g), "robbed": false, "had_body": false})
+	# bodies still in the ground
+	var live := {}
+	for b in get_tree().get_nodes_in_group(&"grave_corpses"):
+		if not (b is Node2D) or not is_instance_valid(b):
 			continue
-		if g.base <= 0:
-			g.base = _grave_count(g.pos)
+		var id: int = b.get_instance_id()
+		live[id] = true
+		if not _grave_bodies.has(id):
+			var p: Vector2 = (b as Node2D).global_position
+			var gi := _nearest_grave(graves, p)
+			_grave_bodies[id] = {"pos": p, "grave": gi}
+			if gi >= 0 and gi < _graves.size():
+				_graves[gi].had_body = true
+	for id in _grave_bodies.keys():
+		if live.has(id):
 			continue
-		if _grave_count(g.pos) < g.base * 0.4:
-			g.robbed = true
-			g.found_at = time + SUSPICION.grave_discover_s
-			note("grave", "a grave was robbed; someone will notice in about %d s" % roundi(SUSPICION.grave_discover_s))
+		var rec: Dictionary = _grave_bodies[id]
+		_grave_bodies.erase(id)
+		_grave_robbed(rec.pos)
+	# fallback: graves that never had a body node, by their wood and bone
+	if w != null:
+		for g in _graves:
+			if g.robbed or g.had_body:
+				continue
+			if g.base <= 0:
+				g.base = _grave_count(g.pos)
+				continue
+			if _grave_count(g.pos) < g.base * SUSPICION.grave_wood_left:
+				g.robbed = true
+				_grave_robbed(g.pos)
+	# someone notices
+	for f in _grave_found.duplicate():
+		if time >= float(f.found_at):
+			_grave_found.erase(f)
+			add_suspicion(SUSPICION.grave_robbed, "grave", "someone found a robbed grave")
+			grave_found.emit(f.at)
+
+
+func _grave_robbed(at: Vector2) -> void:
+	var gi := _nearest_grave(info.get("graves", []), at)
+	if gi >= 0 and gi < _graves.size():
+		_graves[gi]["robbed"] = true
+	_grave_found.append({"at": at, "found_at": time + SUSPICION.grave_discover_s})
+	note("grave", "a grave was robbed; someone will notice in about %d s" % roundi(SUSPICION.grave_discover_s))
+
+
+func _nearest_grave(graves: Array, p: Vector2) -> int:
+	var best := -1
+	var bd := 48.0
+	for i in graves.size():
+		var d := (graves[i] as Vector2).distance_to(p)
+		if d < bd:
+			bd = d
+			best = i
+	return best
+
+
+## How many graves have been robbed and not yet noticed.
+func graves_waiting_to_be_found() -> int:
+	return _grave_found.size()
 
 
 func _grave_count(p: Vector2) -> int:
@@ -878,6 +974,22 @@ func _note_depth(p: Vector2) -> void:
 		var tier: Dictionary = tiers[depth_tier]
 		add_hunger(float(tier.once), "depth", "dug down into %s (%d cells deep)" % [tier.name, int(tier.cells)])
 		depth_tier_reached.emit(depth_tier, String(tier.name))
+
+
+func _on_heart_destroyed(at: Vector2) -> void:
+	_old_heart = at
+	note("heart", "the heart was destroyed; a new one placed far away starts with less Suspicion")
+
+
+func _on_heart_placed(at: Vector2, _radius: float) -> void:
+	if _old_heart == Vector2.INF:
+		return
+	var d := at.distance_to(_old_heart)
+	_old_heart = Vector2.INF
+	if d < RELOCATE.min_px:
+		return
+	var share := minf(RELOCATE.max_share, d / 1000.0 * RELOCATE.share_per_1000px)
+	add_suspicion(-GameState.suspicion * share, "moved", "moved house %d px away: they lost the trail (-%d%%)" % [roundi(d), roundi(share * 100.0)], false)
 
 
 func _on_suspicion_changed(value: float, delta: float, _reason: String) -> void:

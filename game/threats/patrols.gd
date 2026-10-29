@@ -12,6 +12,7 @@ var _next := {} ## town index -> seconds until the next patrol
 var _clock := 0.0
 var _tunnel_t := 0.0
 var _id := 0
+var _graveyard_watches := 0 ## patrols still owed to the graveyard after a robbed grave was found
 
 
 func _ready() -> void:
@@ -19,6 +20,7 @@ func _ready() -> void:
 	info = Threats.info
 	Threats.noise_heard.connect(_on_noise_heard)
 	Threats.sighting_logged.connect(_on_sighting)
+	Threats.grave_found.connect(_on_grave_found)
 	Events.actor_died.connect(_on_actor_died)
 
 
@@ -56,7 +58,14 @@ func send(t: int) -> Dictionary:
 	var start := Vector2(rect.get_center().x, Threats.surface_at(rect.get_center().x))
 	var raid := GameState.has_heart and GameState.suspicion >= Threats.PATROL.raid_at
 	var size := Threats.patrol_size() + (int(Threats.PATROL.raid_extra) if raid else 0)
-	var route := _route_for(t, start)
+	var watch := _graveyard_watches > 0 and not raid and t == _town_nearest_graveyard()
+	var route := _graveyard_route() if watch else PackedVector2Array()
+	if route.is_empty():
+		watch = false
+		route = _route_for(t, start)
+	else:
+		_graveyard_watches -= 1
+		route.insert(0, start)
 	var members: Array = []
 	for i in size:
 		var m := _spawn(start + Vector2((i - size / 2.0) * 14.0, 0))
@@ -72,7 +81,7 @@ func send(t: int) -> Dictionary:
 	_id += 1
 	var p := {"id": _id, "town": t, "members": members, "route": route, "t": 0.0, "home_t": -1.0, "raid": raid}
 	out.append(p)
-	var what := "raid" if raid else ("search party" if _searching() else "patrol")
+	var what := "raid" if raid else ("graveyard watch" if watch else ("search party" if _searching() else "patrol"))
 	Threats.note("patrol", "a %s of %d left %s%s" % [what, members.size(), _town_name(t),
 		" at night" if GameState.is_night() else ""])
 	if raid:
@@ -88,6 +97,28 @@ func members_out() -> Array:
 			if is_instance_valid(m):
 				all.append(m)
 	return all
+
+
+func _on_grave_found(_at: Vector2) -> void:
+	_graveyard_watches = int(Threats.PATROL.graveyard_watches)
+
+
+## World's graveyard walk: the patrol route that starts in the graveyard, or [] if there is none.
+func _graveyard_route() -> PackedVector2Array:
+	var g: Rect2 = info.get("graveyard", Rect2())
+	if not g.has_area():
+		return PackedVector2Array()
+	for r in info.get("patrol_routes", []):
+		var pr := r as PackedVector2Array
+		if pr.size() > 0 and (absf(pr[0].x - g.position.x) <= 8.0 or g.grow(8.0).has_point(pr[0])):
+			return pr.duplicate()
+	return PackedVector2Array([Vector2(g.position.x, Threats.surface_at(g.position.x)),
+		Vector2(g.end.x, Threats.surface_at(g.end.x))])
+
+
+func _town_nearest_graveyard() -> int:
+	var g: Rect2 = info.get("graveyard", Rect2())
+	return _nearest_town(g.get_center()) if g.has_area() else -1
 
 
 func _searching() -> bool:
