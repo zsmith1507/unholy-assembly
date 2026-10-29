@@ -68,6 +68,16 @@ func _step(step_name: String, f: Callable) -> void:
 	moments.call(step_name)
 
 
+## Puts a thing somewhere by hand (an assist). Ragdolls and items move through drop(), not position.
+func _carry(thing: Node2D, at: Vector2) -> void:
+	if not is_instance_valid(thing):
+		return
+	if thing.has_method("drop"):
+		thing.drop(at, Vector2.ZERO)
+	else:
+		thing.global_position = at
+
+
 func _assist(what: String) -> void:
 	assists.append(what)
 	t.note("ASSIST " + what)
@@ -245,12 +255,12 @@ func _feed_corpse() -> bool:
 		await t.ticks(120)
 		if not await harvest(_corpse):
 			_assist("corpse carried down the shaft by hand (Harvest can't draw it over the lip from below)")
-			_corpse.global_position = n.global_position + Vector2(-20, -4)
+			_carry(_corpse, n.global_position + Vector2(-20, -4))
 			await t.ticks(30)
 	var fed := await deliver(_corpse, _grinder)
 	if not fed:
 		_assist("corpse carried into the grinder by hand")
-		_corpse.global_position = _grinder.global_position + Vector2(0, -20)
+		_carry(_corpse, _grinder.global_position + Vector2(0, -20))
 	var ok := await _wait(func(): return int(GameState.stats.get("bodies_ground", 0)) >= 1, 400)
 	t.note("grinder ground the corpse: %s" % ok)
 	if not ok:
@@ -263,7 +273,7 @@ func _feed_corpse() -> bool:
 		if not await deliver(it, _table):
 			_assist("%s carried to the table by hand" % k)
 			if is_instance_valid(it):
-				it.global_position = _table.global_position + Vector2(0, -10)
+				_carry(it, _table.global_position + Vector2(0, -10))
 	ok = await _wait(func(): return int(GameState.stats.get("made_stitched_body", 0)) >= 1, 600)
 	t.note("table stitched a body: %s" % ok)
 	return ok
@@ -276,7 +286,7 @@ func _raise_ghoul() -> bool:
 	if not await deliver(body, _altar):
 		_assist("stitched body carried to the altar by hand")
 		if is_instance_valid(body):
-			body.global_position = _altar.global_position + Vector2(0, -10)
+			_carry(body, _altar.global_position + Vector2(0, -10))
 	await t.ticks(10)
 	if GameState.souls < 1.0:
 		_assist("souls set to 1 for the altar (had %.2f; the first soul has to come from somewhere)" % GameState.souls)
@@ -325,7 +335,18 @@ func _kill_critter() -> bool:
 	var f0 := GameState.fragments + GameState.souls * 5.0
 	var killed := 0
 	for attempt in 4:
-		var c = _nearest_in_group(&"critters", n.global_position, 2000.0)
+		# hunt in the forest east of the shaft (west is the graveyard, full of holes now), ground critters first
+		var c = null
+		var bd := 1e9
+		for x in t.tree.get_nodes_in_group(&"critters"):
+			if not is_instance_valid(x) or x.is_queued_for_deletion() or x.global_position.x < PLAY.lair_x + 40.0:
+				continue
+			var d: float = x.global_position.distance_to(n.global_position) + (400.0 if x.get("kind") == &"crow" else 0.0)
+			if d < bd:
+				bd = d
+				c = x
+		if c == null:
+			c = _nearest_in_group(&"critters", n.global_position, 2000.0)
 		if c == null:
 			t.note("no critters left")
 			break
