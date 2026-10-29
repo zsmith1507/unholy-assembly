@@ -12,3 +12,5 @@ windows.debug.x86_64 = "res://bin/libunholy_sim.windows.template_debug.x86_64.dl
 windows.release.x86_64 = "res://bin/libunholy_sim.windows.template_release.x86_64.dll"
 macos.debug = "res://bin/libunholy_sim.macos.template_debug.framework"
 macos.release = "res://bin/libunholy_sim.macos.template_release.framework"
+web.debug.wasm32 = "res://bin/libunholy_sim.web.template_debug.wasm32.nothreads.wasm"
+web.release.wasm32 = "res://bin/libunholy_sim.web.template_release.wasm32.nothreads.wasm"

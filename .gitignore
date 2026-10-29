@@ -36,3 +36,6 @@ game/bin/*.lib
 game/bin/*.exp
 game/bin/*.pdb
 native/build/
+
+# Web export output (game/export_presets.cfg); built and published by .github/workflows/web.yml
+build/

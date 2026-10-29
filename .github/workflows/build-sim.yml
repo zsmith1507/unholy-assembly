@@ -1,7 +1,9 @@
 name: Build pixel sim
 
-# Compiles the C++ falling-sand extension (native/) for Windows, Linux and macOS
+# Compiles the C++ falling-sand extension (native/) for Windows, Linux, macOS and the web
 # and commits the libraries to game/bin/, so the Godot project opens anywhere without a compiler.
+# The web library is single-threaded (threads=no) and built with the Emscripten version that
+# Godot's own web export templates use (godotengine/build-containers, branch 4.7, Dockerfile.web).
 
 on:
   push:
@@ -13,6 +15,10 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # Godot 4.7's official web templates are built with this Emscripten; the web library must match it.
+  EMSCRIPTEN_VERSION: "4.0.20"
 
 concurrency:
   group: build-sim
@@ -30,6 +36,9 @@ jobs:
             os: ubuntu-22.04
           - platform: macos
             os: macos-latest
+          - platform: web
+            os: ubuntu-22.04
+            extra: threads=no
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +48,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install scons==4.8.1
+      - name: Set up Emscripten (web only)
+        if: matrix.platform == 'web'
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+          actions-cache-folder: emsdk-cache
       - name: Cache godot-cpp objects
         uses: actions/cache@v4
         with:
@@ -46,14 +61,14 @@ jobs:
             native/godot-cpp/bin
             native/godot-cpp/gen
             native/.scons-cache
-          key: godot-cpp-${{ matrix.platform }}-${{ hashFiles('.gitmodules', 'native/SConstruct') }}-${{ github.sha }}
-          restore-keys: godot-cpp-${{ matrix.platform }}-${{ hashFiles('.gitmodules', 'native/SConstruct') }}-
+          key: godot-cpp-${{ matrix.platform }}${{ matrix.platform == 'web' && env.EMSCRIPTEN_VERSION || '' }}-${{ hashFiles('.gitmodules', 'native/SConstruct') }}-${{ github.sha }}
+          restore-keys: godot-cpp-${{ matrix.platform }}${{ matrix.platform == 'web' && env.EMSCRIPTEN_VERSION || '' }}-${{ hashFiles('.gitmodules', 'native/SConstruct') }}-
       - name: Build debug and release
         working-directory: native
         shell: bash
         run: |
-          scons platform=${{ matrix.platform }} target=template_debug debug_symbols=no -j4
-          scons platform=${{ matrix.platform }} target=template_release -j4
+          scons platform=${{ matrix.platform }} target=template_debug debug_symbols=no ${{ matrix.extra }} -j4
+          scons platform=${{ matrix.platform }} target=template_release ${{ matrix.extra }} -j4
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.platform }}
