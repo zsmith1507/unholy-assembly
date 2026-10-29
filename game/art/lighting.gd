@@ -14,6 +14,9 @@ const NECRO_TEAL := Color("3fd6c0")
 ## Applied to every add_light() call so all departments' lights share one look. energy_scale lifts pools
 ## enough to read against dark dirt; radius_scale widens them.
 const LIGHT := {"energy_scale": 1.35, "radius_scale": 1.1}
+## Lifts every darkness colour toward white by this share (0 = the original moody palette, 1 = no darkness).
+## Zach found 0 too dark to play; raise or lower this one number to taste.
+const BRIGHTNESS := 0.25
 
 var modulate_node: CanvasModulate
 var surface_y := 0.0  ## pixels; set from info.surface_y_px
@@ -67,7 +70,8 @@ func ambient(h: float, depth_px: float) -> Color:
 	var t := clampf(depth_px / 160.0, 0.0, 1.0)        # fully underground ~10 m down
 	c = c.lerp(DEEP, t)
 	var d := clampf((depth_px - deep_y * 0.5) / deep_y, 0.0, 1.0)
-	return c.lerp(ABYSS, d)
+	c = c.lerp(ABYSS, d)
+	return c.lerp(Color.WHITE, BRIGHTNESS)
 
 
 func _update() -> void:

@@ -10,6 +10,9 @@ const ECON := {
 	"start_souls": 1.0, # one soul in the heart at the start: enough for the first refill
 	"start_max_mana": 1.0, # the mana bar holds one soul's worth at first
 	"start_mana": 1.0,
+	# Mana slowly comes back on its own, so the early game never stalls once the starting souls are spent.
+	"mana_regen_per_sec": 0.02, # souls' worth per second: an empty one-soul bar refills in about 50 s
+	"mana_regen_delay": 2.0, # seconds after the last spell before it starts coming back
 }
 
 var souls: float = 0.0 ## souls stored in the necrotic heart
@@ -40,6 +43,7 @@ func reset() -> void:
 	fragments = 0.0
 	mana = ECON.start_mana
 	max_mana = ECON.start_max_mana
+	_since_spend = 999.0
 	suspicion = 0.0
 	hunger = 0.0
 	has_heart = false
@@ -80,10 +84,22 @@ func spend_souls(amount: float) -> bool:
 
 # ---------------------------------------------------------------- mana (in souls' worth)
 
+var _since_spend := 999.0 ## seconds since mana was last spent; regeneration waits for ECON.mana_regen_delay
+
+
+func _process(delta: float) -> void:
+	_since_spend += delta
+	if mana >= max_mana or _since_spend < ECON.mana_regen_delay or ECON.mana_regen_per_sec <= 0.0:
+		return
+	mana = minf(max_mana, mana + ECON.mana_regen_per_sec * delta)
+	Events.mana_changed.emit(mana, max_mana)
+
+
 func spend_mana(amount: float) -> bool:
 	if mana + 0.0001 < amount:
 		return false
 	mana = maxf(0.0, mana - amount)
+	_since_spend = 0.0
 	Events.mana_changed.emit(mana, max_mana)
 	return true
 
