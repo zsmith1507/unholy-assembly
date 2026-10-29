@@ -68,7 +68,8 @@ func why_not(kind: StringName, at: Vector2) -> String:
 	var y1 := floori((rect.end.y - 0.01) / c)
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
-			if not w.in_bounds(x, y) or not w.is_empty(x, y):
+			# Liquids (blood the grinder splashes, puddles) don't block a build; earth and stone do.
+			if not w.in_bounds(x, y) or not (w.is_empty(x, y) or w.is_liquid(x, y)):
 				return "not_dug"
 	var floor_y := y1 + 1
 	var solid := 0
