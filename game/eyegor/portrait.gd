@@ -1,7 +1,7 @@
 class_name EyegorPortrait
 extends Control
 ## Eyegor's portrait, drawn in code until Art supplies one: a floating bloodshot eye with two black feathered
-## wings and a clipboard. The pupil darts while he talks; the lid narrows when he's concerned.
+## wings, a clipboard and a quill. The pupil darts while he talks; the lid narrows when he's concerned.
 
 const LOOK := {
 	"flap_speed": 5.0,
@@ -40,6 +40,12 @@ func _draw() -> void:
 	draw_rect(Rect2(cb.position + Vector2(cb.size.x * 0.35, -1.5), Vector2(cb.size.x * 0.3, 2.5)), Color("8a8a8a"))
 	for i in 2:
 		draw_line(cb.position + Vector2(3, 4 + i * 3), cb.position + Vector2(cb.size.x - 3, 4 + i * 3), Color("2e2218"), 1.0)
+	# quill, held up beside the clipboard
+	var qb := cb.position + Vector2(cb.size.x + 1, cb.size.y * 0.2)
+	var qt := qb + Vector2(r * 0.55, -r * 1.1)
+	draw_line(qb, qt, Color("d8ccaa"), 1.0)
+	draw_colored_polygon(PackedVector2Array([qt, qt.lerp(qb, 0.6) + Vector2(2.5, 0), qt.lerp(qb, 0.6) + Vector2(-1, 0)]), Color("c9bfa4"))
+	draw_line(qb, qb + Vector2(-1, 2), Color("1a1418"), 1.0)
 	# eyeball
 	draw_circle(c, r, Color("e8dcc0"))
 	for i in 4: # bloodshot veins

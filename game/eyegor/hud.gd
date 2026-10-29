@@ -19,6 +19,7 @@ const HUD := {
 
 var objectives: EyegorObjectives = null
 var panel: EyegorPanel
+var clipboard: EyegorClipboard
 var _mana_bar: ProgressBar
 var _mana_text: Label
 var _heart_text: Label
@@ -130,6 +131,10 @@ func _ready() -> void:
 	_banner.add_child(_banner_sub)
 	_banner.modulate.a = 0.0
 	add_child(_banner)
+	# right: Eyegor's clipboard (checklist and recent lines), toggled with the advisor button
+	clipboard = EyegorClipboard.new()
+	clipboard.objectives = objectives
+	add_child(clipboard)
 	Events.soul_collected.connect(_on_soul)
 	Events.milestone_reached.connect(show_banner)
 	_last_fragments = GameState.fragments

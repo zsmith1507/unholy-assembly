@@ -50,6 +50,21 @@ func run(t) -> void:
 	t.check(true, "pop-ups for souls and fragments don't error")
 	hud.show_banner(&"first_ghoul")
 	t.check(true, "an unlock with no milestone line is ignored")
+	# the clipboard opens on the advisor button and lists the checklist and recent lines
+	var o := EyegorObjectives.new()
+	t.root.add_child(o)
+	hud.clipboard.objectives = o
+	o.start()
+	var ev := InputEventAction.new()
+	ev.action = &"advisor"
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	await t.ticks(3)
+	t.check(hud.clipboard.visible, "the advisor button opens the clipboard")
+	await t.ticks(2)
+	t.check(hud.clipboard._box.get_child_count() >= 4, "clipboard lists checklist and recent lines (%d)" % hud.clipboard._box.get_child_count())
+	hud.clipboard.toggle()
+	t.check(not hud.clipboard.visible, "and closes again")
 	# the panel: announcements give way to real talk and don't repeat
 	var p := EyegorPanel.new()
 	layer.add_child(p)

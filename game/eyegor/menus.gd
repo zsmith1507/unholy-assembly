@@ -9,7 +9,10 @@ const MENU := {
 	"dim": Color(0.02, 0.015, 0.03, 0.82),
 }
 
-const CONTROLS := ["ctl_move", "ctl_jump", "ctl_cast", "ctl_cast_alt", "ctl_interact", "ctl_spells", "ctl_advisor", "ctl_pause"]
+const CONTROLS := ["ctl_move", "ctl_jump", "ctl_aim", "ctl_cast", "ctl_cast_alt", "ctl_interact", "ctl_spells", "ctl_advisor", "ctl_pause"]
+## Rows whose binding is a pair of actions (shown "A / D") or fixed text.
+const CONTROL_PAIRS := {"ctl_move": ["move_left", "move_right"], "ctl_spells": ["spell_prev", "spell_next"]}
+const CONTROL_FIXED := {"ctl_aim": ["Mouse", "Right Stick"]}
 const CONTROL_ACTIONS := {
 	"ctl_move": "move_right", "ctl_jump": "jump", "ctl_cast": "cast", "ctl_cast_alt": "cast_alt",
 	"ctl_interact": "interact", "ctl_spells": "spell_next", "ctl_advisor": "advisor", "ctl_pause": "pause",
@@ -103,12 +106,21 @@ func _build(which: StringName) -> void:
 				grid.add_child(EyegorUI.label(Narrative.line(h) if h != "" else "", "small", -1, EyegorUI.COLORS.text_dim))
 			for k in CONTROLS:
 				grid.add_child(EyegorUI.label(Narrative.line(k), "body"))
-				var act: String = CONTROL_ACTIONS[k]
-				grid.add_child(EyegorUI.label(EyegorUI.binding_name(act, false), "mono", -1, EyegorUI.COLORS.teal))
-				grid.add_child(EyegorUI.label(EyegorUI.binding_name(act, true), "mono", -1, EyegorUI.COLORS.teal))
+				for pad in [false, true]:
+					grid.add_child(EyegorUI.label(_binding_text(k, pad), "mono", -1, EyegorUI.COLORS.teal))
 			first = _button("controls_back", func(): _build(_back_to))
 	if first != null:
 		first.call_deferred("grab_focus")
+
+
+func _binding_text(k: String, pad: bool) -> String:
+	if CONTROL_FIXED.has(k):
+		return CONTROL_FIXED[k][1 if pad else 0]
+	if CONTROL_PAIRS.has(k):
+		var a := EyegorUI.binding_name(CONTROL_PAIRS[k][0], pad)
+		var b := EyegorUI.binding_name(CONTROL_PAIRS[k][1], pad)
+		return b if a == b else "%s / %s" % [a, b]
+	return EyegorUI.binding_name(String(CONTROL_ACTIONS.get(k, "")), pad)
 
 
 func _show_controls() -> void:
