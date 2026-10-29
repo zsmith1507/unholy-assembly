@@ -5,12 +5,15 @@ extends Node2D
 ## add_light() cut pools out of it. The sim's glow map and sprite glow layers are unshaded, so they stay bright.
 ##   get_tree().get_first_node_in_group("lighting").add_light(node, Color("3fd6c0"), 48.0, 1.0)
 
-const NIGHT := Color("232a3d")   # moonlit blue-grey on the surface
+const NIGHT := Color("2e3752")   # moonlit blue-grey on the surface
 const DUSK := Color("6e4a4e")    # bruised warm dusk
 const DAY := Color("b7ad9a")     # grimy overcast day; never full white
-const DEEP := Color("101c22")    # cold teal-black underground
-const ABYSS := Color("1a1026")   # purple near the deep
+const DEEP := Color("182a30")    # cold teal-black underground
+const ABYSS := Color("231633")   # purple near the deep
 const NECRO_TEAL := Color("3fd6c0")
+## Applied to every add_light() call so all departments' lights share one look. energy_scale lifts pools
+## enough to read against dark dirt; radius_scale widens them.
+const LIGHT := {"energy_scale": 1.35, "radius_scale": 1.1}
 
 var modulate_node: CanvasModulate
 var surface_y := 0.0  ## pixels; set from info.surface_y_px
@@ -76,9 +79,9 @@ func add_light(node: Node2D, color: Color, radius_px: float, energy: float) -> P
 	var l := PointLight2D.new()
 	l.name = "ArtLight"
 	l.texture = light_texture()
-	l.texture_scale = radius_px / 64.0
+	l.texture_scale = radius_px * LIGHT.radius_scale / 64.0
 	l.color = color
-	l.energy = energy
+	l.energy = energy * LIGHT.energy_scale
 	l.blend_mode = Light2D.BLEND_MODE_ADD
 	l.shadow_enabled = false
 	if node:

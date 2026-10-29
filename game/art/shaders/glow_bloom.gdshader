@@ -4,7 +4,7 @@ render_mode blend_add, unshaded;
 // and a wide, banded halo spreads a few cells around it. Applied by game/art/install.gd to SimView's glow layer.
 
 uniform float core = 1.0;       // the emissive cells themselves
-uniform float halo = 1.6;       // strength of the spread
+uniform float halo = 2.0;       // strength of the spread
 uniform float radius = 3.5;     // halo radius in cells
 uniform float bands = 10.0;     // quantise the halo so it reads as pixel art (0 = smooth)
 
@@ -25,7 +25,8 @@ void fragment() {
 			wsum += w;
 		}
 	}
-	vec3 h = sum / wsum * halo;
+	// only the spill beyond what the cell already has, so a big glowing pool is not brightened, just haloed
+	vec3 h = max(sum / wsum - base, vec3(0.0)) * halo;
 	if (bands > 0.0) {
 		h = floor(h * bands + 0.5) / bands;
 	}

@@ -4,7 +4,7 @@ extends RefCounted
 
 ## Bloom on SimView's glow layer (shaders/glow_bloom.gdshader). halo: how far glowing cells light their
 ## neighbours; radius in cells; bands quantise the falloff so it stays pixel-art (0 = smooth).
-const GLOW := {"core": 1.0, "halo": 1.6, "radius": 3.5, "bands": 10.0}
+const GLOW := {"core": 1.0, "halo": 2.0, "radius": 3.5, "bands": 10.0}
 
 
 func install(main: Node, info: Dictionary) -> Variant:

@@ -65,7 +65,7 @@ func run(t) -> void:
 	t.root.add_child(holder)
 	var l: PointLight2D = lighting.add_light(holder, Color("3fd6c0"), 48.0, 1.0)
 	t.check(l != null and l.get_parent() == holder, "add_light puts a PointLight2D on the node")
-	t.check(l.texture != null and is_equal_approx(l.texture_scale, 48.0 / 64.0), "light radius maps to texture scale")
+	t.check(l.texture != null and is_equal_approx(l.texture_scale, 48.0 * ArtLighting.LIGHT.radius_scale / 64.0), "light radius maps to texture scale")
 	var day := lighting.ambient(12.0, 0.0)
 	var night := lighting.ambient(23.0, 0.0)
 	var deep := lighting.ambient(12.0, 600.0)
