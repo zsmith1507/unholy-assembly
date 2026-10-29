@@ -14,6 +14,7 @@ const HUD := {
 	"banner_time": 3.2,
 	"hint_radius": 24.0, ## matches the necromancer's interact reach
 	"poll": 0.15,
+	"backing_alpha": 0.55, ## the dark plate behind the top corners
 }
 
 var objectives: EyegorObjectives = null
@@ -39,7 +40,7 @@ var _last_fragments := 0.0
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	theme = EyegorUI.theme()
 	var m: int = HUD.margin
@@ -66,32 +67,43 @@ func _ready() -> void:
 	_hun_bar = _meter(tr, "hud_hunger", EyegorUI.COLORS.hunger, EyegorUI.COLORS.hunger_dark)
 	# top-centre: objective
 	_obj = EyegorUI.label("", "body", -1, EyegorUI.COLORS.text)
-	_obj.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_obj.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_obj.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_obj.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_obj.position.y = m
+	_obj.offset_top = m
+	_obj.offset_left = 190 # between the mana block and the clock
+	_obj.offset_right = -130
+	_obj.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_obj.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_obj)
 	# bottom-centre: spells; above them, the interact hint
 	_spells = HBoxContainer.new()
-	_spells.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_spells.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	# bottom-right, so Eyegor's panel (bottom-left) never covers it
+	_spells.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_spells.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_spells.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_spells.position.y = -m
+	_spells.offset_right = -m
+	_spells.offset_bottom = -m
+	_spells.offset_left = -m
+	_spells.offset_top = -m
 	_spells.add_theme_constant_override("separation", 3)
 	add_child(_spells)
 	_hint = EyegorUI.label("", "body", -1, EyegorUI.COLORS.text)
-	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_hint.offset_bottom = -46
+	_hint.offset_top = -84 # above Eyegor's panel and the toolbar, under the necromancer's feet
+	_hint.offset_bottom = -84
+	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_hint)
 	_detail = EyegorUI.label("", "small", -1, EyegorUI.COLORS.text_dim)
-	_detail.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_detail.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_detail.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_detail.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_detail.offset_bottom = -30
+	_detail.offset_top = -32 # just above the toolbar, right-aligned with it
+	_detail.offset_bottom = -32
+	_detail.offset_right = -m
+	_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_detail)
 	# bottom-left: Eyegor
 	panel = EyegorPanel.new()
@@ -254,17 +266,23 @@ func _popup(text: String, at: Vector2, color: Color) -> void:
 	tw.chain().tween_callback(l.queue_free)
 
 
+## A corner block on a faint dark backing (readable over bright sky and foliage); returns its VBox.
 func _corner(preset: int, offset: Vector2) -> VBoxContainer:
-	var v := VBoxContainer.new()
-	v.set_anchors_preset(preset)
-	v.add_theme_constant_override("separation", 1)
+	var back := PanelContainer.new()
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var st := EyegorUI.box(Color(0.03, 0.02, 0.04, HUD.backing_alpha), Color(0, 0, 0, 0), 3)
+	back.add_theme_stylebox_override("panel", st)
+	back.set_anchors_preset(preset)
 	if offset.x < 0:
-		v.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	v.offset_left = offset.x
-	v.offset_right = offset.x
-	v.offset_top = offset.y
-	v.offset_bottom = offset.y
-	add_child(v)
+		back.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	back.offset_left = offset.x
+	back.offset_right = offset.x
+	back.offset_top = offset.y
+	back.offset_bottom = offset.y
+	add_child(back)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 1)
+	back.add_child(v)
 	return v
 
 

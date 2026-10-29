@@ -18,7 +18,7 @@ signal all_completed
 const OBJ := {
 	"intro_delay": 4.0, ## seconds between a completion line and the next objective's introduction
 	"first_intro_delay": 0.6, ## after start()
-	"cells_for_chamber": 400, ## cells the Dig spell must remove after the heart is placed to count as "a chamber"
+	"cells_for_chamber": 5000, ## cells the Dig spell must remove after the heart goes in: ~4 s of steady digging, a 140 px room
 	"poll_interval": 0.25, ## seconds between stat/patrol checks
 }
 
@@ -299,6 +299,8 @@ func _watch_patrols() -> void:
 		pn = threats.get("patrols") if threats != null else null
 	if pn == null or not is_instance_valid(pn):
 		return
+	if pn.has_signal("patrol_left") and not pn.is_connected("patrol_left", _on_patrol_left):
+		pn.connect("patrol_left", _on_patrol_left)
 	var still := {}
 	var out = pn.get("out")
 	if out is Array:
@@ -309,6 +311,11 @@ func _watch_patrols() -> void:
 		if not still.has(id):
 			_patrol_over()
 	_patrols_out = still
+
+
+## A patrol set out (patrols.gd): watch for it even if it is gone again before the next poll.
+func _on_patrol_left(p: Dictionary) -> void:
+	_patrols_out[p.get("id", 0)] = true
 
 
 func _patrol_over() -> void:
