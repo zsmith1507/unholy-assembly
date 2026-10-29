@@ -26,12 +26,11 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, s), Color("4a3a4c"), false, 1.0)
 	# wings: three black feathers each side, flapping
 	var flap := sin(_t * LOOK.flap_speed) * 0.35
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		for i in 3:
-			var ang := (-0.5 + i * 0.35 + flap) * side
-			var base := c + Vector2(side * r * 0.8, 0)
-			var dir := Vector2(side, 0).rotated(-ang * side * side)
-			dir = Vector2(side * cos(ang), -sin(absf(ang)) + 0.3 * i - 0.3)
+			var ang: float = (-0.5 + i * 0.35 + flap) * side
+			var base: Vector2 = c + Vector2(side * r * 0.8, 0)
+			var dir := Vector2(side * cos(ang), -sin(absf(ang)) + 0.3 * i - 0.3)
 			var tip := base + dir.normalized() * r * (1.6 - i * 0.25)
 			draw_colored_polygon(PackedVector2Array([base + Vector2(0, -2), tip, base + Vector2(0, 2)]), Color("1a1418") if i % 2 == 0 else Color("2a2028"))
 	# clipboard, held below
