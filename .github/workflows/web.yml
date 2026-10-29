@@ -11,7 +11,7 @@ name: Web build
 
 on:
   push:
-    branches: [main, web-export]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -141,7 +141,7 @@ jobs:
             <h1>Unholy Assembly</h1>
             <p class="tag">Bringing Eternal Life to a Village Near You, Since 1197.</p>
             <a class="play" href="play/">Play in your browser</a>
-            <p><small>Desktop browser with keyboard and mouse or a gamepad. The first load downloads about 60&nbsp;MB.</small></p>
+            <p><small>Desktop browser with keyboard and mouse or a gamepad. The first load downloads up to 50&nbsp;MB.</small></p>
             <p>Prototypes:</p>
             <ul>
               <li><a href="prototypes/proving-ground.html">Proving Ground</a>: the spell range</li>

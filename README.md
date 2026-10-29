@@ -10,6 +10,12 @@ A 2D side-scrolling factory sim with a gothic, gallows-humour streak. You play a
 
 The pixel simulation is a C++ extension. GitHub Actions builds it for Windows, Linux and macOS and commits the libraries to `game/bin/`, so there is nothing to compile: pull the latest `main` and press Play.
 
+### Play in your browser
+
+**[zsmith1507.github.io/unholy-assembly/play/](https://zsmith1507.github.io/unholy-assembly/play/)**
+
+Every push to `main` rebuilds the browser version and publishes it there (`.github/workflows/web.yml`; the latest build can also be downloaded from that workflow's run as the `web-build` artifact). Use a desktop browser (Chrome, Edge or Firefox) with keyboard and mouse or a gamepad; click the game once so it takes the keyboard. The first load downloads up to 50 MB (the engine plus the game), so give it a moment; later visits come from the browser's cache. Phones and tablets aren't supported.
+
 ### Controls
 
 | Keyboard and mouse | Gamepad (Steam Deck) | Action |
