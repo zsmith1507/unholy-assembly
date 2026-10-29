@@ -18,40 +18,40 @@ signal all_completed
 const OBJ := {
 	"intro_delay": 4.0, ## seconds between a completion line and the next objective's introduction
 	"first_intro_delay": 0.6, ## after start()
-	"dig_casts_for_chamber": 6, ## Dig spell casts that count as "a chamber" (if Necro doesn't count cells)
-	"cells_for_chamber": 300, ## or this many cells dug, if GameState.stats["cells_dug"] is kept
-	"poll_interval": 0.25, ## seconds between stat/group checks
+	"cells_for_chamber": 400, ## cells the Dig spell must remove after the heart is placed to count as "a chamber"
+	"poll_interval": 0.25, ## seconds between stat/patrol checks
 }
 
-## The checklist, in order. `stats`: GameState.stats counters that also complete it (any one >= 1, or the
-## number given). The events each one listens to are wired in _connect_events() below.
+## The checklist, in order. Each is completed by the real event noted beside it (wired in _connect_events),
+## or by the GameState.stats counter the owning department keeps (any listed counter reaching its number).
 const LIST := [
-	{"id": &"place_heart", "stats": {"hearts_placed": 1}},
-	{"id": &"refill_mana", "stats": {"mana_refills": 1}},
-	{"id": &"dig_chamber", "stats": {"cells_dug": 300, "chambers_dug": 1}},
-	{"id": &"rob_grave", "stats": {"graves_robbed": 1}},
-	{"id": &"build_grinder", "stats": {"grinders_built": 1}},
-	{"id": &"grind_corpse", "stats": {"corpses_ground": 1}},
-	{"id": &"build_stitching_table", "stats": {"stitching_tables_built": 1}},
-	{"id": &"stitch_body", "stats": {"bodies_stitched": 1}},
-	{"id": &"build_altar", "stats": {"altars_built": 1}},
-	{"id": &"raise_ghoul", "stats": {"minions_raised": 1}},
-	{"id": &"mark_dig", "stats": {"dig_orders": 1}},
-	{"id": &"harvest_fragments", "stats": {"fragments_collected": 1}},
-	{"id": &"survive_patrol", "stats": {"patrols_survived": 1}},
+	{"id": &"place_heart", "stats": {"built_heart": 1}}, ## Events.heart_placed (Lair: GameState.set_heart)
+	{"id": &"refill_mana", "stats": {}}, ## GameState.refill_mana_from_heart: souls_changed down, then mana_changed up
+	{"id": &"dig_chamber", "stats": {}}, ## Necromancer's Dig spell removed_total, counted from when the heart went in
+	{"id": &"rob_grave", "stats": {}}, ## Events.body_harvested with a graveyard body (Corpse.fresh / part data.fresh false)
+	{"id": &"build_grinder", "stats": {"built_grinder": 1}}, ## Events.machine_built, machine.kind == &"grinder"
+	{"id": &"grind_corpse", "stats": {"bodies_ground": 1}}, ## Events.item_produced(&"gibs"/&"bones") from the grinder
+	{"id": &"build_stitching_table", "stats": {"built_stitching_table": 1}}, ## Events.machine_built
+	{"id": &"stitch_body", "stats": {"made_stitched_body": 1}}, ## Events.item_produced(&"stitched_body")
+	{"id": &"build_altar", "stats": {"built_altar": 1}}, ## Events.machine_built
+	{"id": &"raise_ghoul", "stats": {"minions_raised": 1}}, ## Events.minion_raised
+	{"id": &"mark_dig", "stats": {}}, ## Events.dig_marked (the Dig Order spell)
+	{"id": &"harvest_fragments", "stats": {}}, ## GameState.fragments rises (critter orbs: GameState.add_fragments)
+	{"id": &"survive_patrol", "stats": {}}, ## Threats.patrols: a patrol that left comes home (or never does), heart intact
 ]
 
 var current := -1 ## index into LIST; -1 before start(), LIST.size() when all done
 var done := {} ## id -> true
 var _satisfied := {} ## id -> true: its event happened, even before it was current
-var _progress := {} ## id -> int, for objectives that count (dig casts)
+var _dig_base := -1 ## the Dig spell's removed_total when the heart went in
 var _poll := 0.0
 var _intro_timer := -1.0
 var _last_mana := -1.0
 var _last_souls := -1.0
 var _souls_dropped_frame := -1
 var _last_fragments := 0.0
-var _patrol_seen := false
+var patrols_node: Node = null ## tests may hand in a patrols node; otherwise Threats.patrols is used
+var _patrols_out := {} ## patrol id -> true while a patrol is out
 var _started := false
 
 
@@ -101,11 +101,8 @@ func current_text() -> String:
 
 ## (have, need) for objectives that count up; (0, 1) otherwise.
 func progress_of(id: StringName) -> Vector2i:
-	if id == &"dig_chamber":
-		var cells := int(GameState.stats.get("cells_dug", 0))
-		if cells > 0:
-			return Vector2i(int(cells * 100.0 / OBJ.cells_for_chamber), 100)
-		return Vector2i(int(_progress.get(id, 0)), OBJ.dig_casts_for_chamber)
+	if id == &"dig_chamber" and not _satisfied.has(id):
+		return Vector2i(int(_dug_since_heart() * 100.0 / OBJ.cells_for_chamber), 100)
 	return Vector2i(1 if _satisfied.has(id) else 0, 1)
 
 
@@ -186,10 +183,9 @@ func _introduce() -> void:
 # ------------------------------------------------------------------ listening
 
 func _connect_events() -> void:
-	Events.heart_placed.connect(func(_at, _r): satisfy(&"place_heart"))
+	Events.heart_placed.connect(_on_heart_placed)
 	Events.souls_changed.connect(_on_souls_changed)
 	Events.mana_changed.connect(_on_mana_changed)
-	Events.spell_cast.connect(_on_spell_cast)
 	Events.body_harvested.connect(_on_body_harvested)
 	Events.machine_built.connect(_on_machine_built)
 	Events.item_produced.connect(_on_item_produced)
@@ -198,13 +194,17 @@ func _connect_events() -> void:
 	Events.soul_collected.connect(_on_soul_collected)
 
 
+func _on_heart_placed(_at: Vector2, _r: float) -> void:
+	satisfy(&"place_heart")
+	if _dig_base < 0:
+		_dig_base = _dig_removed()
+
+
 func _on_souls_changed(souls: float) -> void:
 	if souls < _last_souls - 0.0001:
 		_souls_dropped_frame = Engine.get_process_frames()
 	_last_souls = souls
-	if GameState.fragments > _last_fragments + 0.0001:
-		satisfy(&"harvest_fragments")
-	_last_fragments = GameState.fragments
+	_check_fragments()
 
 
 ## A refill is mana going up in the same frame souls went down (GameState.refill_mana_from_heart).
@@ -215,84 +215,113 @@ func _on_mana_changed(mana: float, _max_mana: float) -> void:
 	_last_mana = mana
 
 
-func _on_spell_cast(spell_id: StringName, at: Vector2) -> void:
-	var s := String(spell_id)
-	if s == "dig" or s == "bore":
-		# Count digging near the heart (or anywhere, before there is one) toward the chamber.
-		if not GameState.has_heart or GameState.heart_radius <= 0.0 or at.distance_to(GameState.heart_pos) <= GameState.heart_radius * 1.5:
-			_progress[&"dig_chamber"] = int(_progress.get(&"dig_chamber", 0)) + 1
-			if int(_progress[&"dig_chamber"]) >= OBJ.dig_casts_for_chamber:
-				satisfy(&"dig_chamber")
-	elif s.contains("dig") and (s.contains("command") or s.contains("order") or s.contains("mark")):
-		satisfy(&"mark_dig")
-
-
+## Harvest hands us whatever reached the necromancer's hand. Graveyard bodies are not fresh.
 func _on_body_harvested(item: Node2D) -> void:
 	if item == null or not is_instance_valid(item):
 		return
-	if _kind_of(item) == &"corpse" or item.is_in_group(&"item_corpse"):
+	var fresh = item.get("fresh")
+	var data = item.get("data")
+	if fresh == null and data is Dictionary:
+		fresh = (data as Dictionary).get("fresh", null)
+	if fresh == false:
 		satisfy(&"rob_grave")
 
 
 func _on_machine_built(machine: Node2D) -> void:
 	match _kind_of(machine):
 		&"heart": satisfy(&"place_heart")
-		&"grinder", &"corpse_grinder": satisfy(&"build_grinder")
+		&"grinder": satisfy(&"build_grinder")
 		&"stitching_table": satisfy(&"build_stitching_table")
-		&"altar", &"reanimation_altar": satisfy(&"build_altar")
+		&"altar": satisfy(&"build_altar")
 
 
 func _on_item_produced(kind: StringName, _amount: int, _at: Vector2) -> void:
 	match kind:
-		&"gibs", &"bones", &"part": satisfy(&"grind_corpse")
+		&"gibs", &"bones": satisfy(&"grind_corpse")
 		&"stitched_body": satisfy(&"stitch_body")
-		&"fragment", &"soul_fragment": satisfy(&"harvest_fragments")
 
 
 func _on_soul_collected(_amount: float, source: String, _at: Vector2) -> void:
-	if source == "fragments" or source.contains("critter") or source.contains("fragment"):
+	if source == "fragments":
 		satisfy(&"harvest_fragments")
 
 
-## Polled: fragments that arrive without a souls_changed, and the patrol watch.
-func _poll_state() -> void:
+func _check_fragments() -> void:
 	if GameState.fragments > _last_fragments + 0.0001:
 		satisfy(&"harvest_fragments")
 	_last_fragments = GameState.fragments
-	if current_id() == &"survive_patrol" or _patrol_seen:
-		var patrols := _patrol_count()
-		if patrols > 0:
-			_patrol_seen = true
-		elif _patrol_seen and GameState.has_heart:
-			satisfy(&"survive_patrol")
 
 
-## Farmers on patrol: nodes in group "patrol"/"patrols", or humans whose mode is &"patrol".
-func _patrol_count() -> int:
+## Polled: fragments, the chamber's size, and the patrol watch.
+func _poll_state() -> void:
+	_check_fragments()
+	_last_souls = GameState.souls
+	_last_mana = GameState.mana
+	if _dig_base < 0 and GameState.has_heart:
+		_dig_base = _dig_removed()
+	if _dig_base >= 0 and _dug_since_heart() >= OBJ.cells_for_chamber:
+		satisfy(&"dig_chamber")
+	_watch_patrols()
+
+
+## Cells the Dig spell has removed since the heart went in.
+func _dug_since_heart() -> int:
+	if _dig_base < 0:
+		return 0
+	return maxi(0, _dig_removed() - _dig_base)
+
+
+func _dig_removed() -> int:
+	var nec := _player()
+	if nec == null or not nec.has_method("get_spell"):
+		return 0
+	var dig = nec.get_spell(&"dig")
+	if dig == null:
+		return 0
+	var n = dig.get("removed_total")
+	return int(n) if n != null else 0
+
+
+func _player() -> Node:
 	var tree := get_tree()
 	if tree == null:
-		return 0
-	var n := tree.get_nodes_in_group(&"patrol").size() + tree.get_nodes_in_group(&"patrols").size()
-	if n > 0:
-		return n
-	for h in tree.get_nodes_in_group(&"humans"):
-		var mode = h.get("mode")
-		if mode != null and StringName(str(mode)) == &"patrol":
-			n += 1
-	return n
+		return null
+	var p := tree.get_first_node_in_group(&"player")
+	return p
 
 
-## A machine's or item's kind, whatever the owning department called the property.
+## The Threats autoload's patrols node (patrols.gd) and its `out` list of patrols in the field.
+## A patrol that left and is no longer out (home, or nobody left to walk home) has been survived.
+func _watch_patrols() -> void:
+	var pn = patrols_node
+	if pn == null:
+		var threats := get_node_or_null(^"/root/Threats")
+		pn = threats.get("patrols") if threats != null else null
+	if pn == null or not is_instance_valid(pn):
+		return
+	var still := {}
+	var out = pn.get("out")
+	if out is Array:
+		for p in out:
+			if p is Dictionary:
+				still[p.get("id", 0)] = true
+	for id in _patrols_out:
+		if not still.has(id):
+			_patrol_over()
+	_patrols_out = still
+
+
+func _patrol_over() -> void:
+	if GameState.has_heart:
+		GameState.count("patrols_survived")
+		satisfy(&"survive_patrol")
+
+
+## A machine's or item's kind (Lair machines and core Items both use `kind`).
 static func _kind_of(node: Node) -> StringName:
 	if node == null or not is_instance_valid(node):
 		return &""
-	for prop in ["kind", "machine_kind", "building_kind", "type"]:
-		var v = node.get(prop)
-		if v != null and (v is String or v is StringName) and String(v) != "":
-			return StringName(v)
-	for g in node.get_groups():
-		var gs := String(g)
-		for k in ["heart", "grinder", "stitching_table", "altar", "corpse"]:
-			if gs == k or gs == "machine_" + k or gs == "item_" + k:
-				return StringName(k)
+	var v = node.get("kind")
+	if v != null and (v is String or v is StringName):
+		return StringName(v)
 	return &""

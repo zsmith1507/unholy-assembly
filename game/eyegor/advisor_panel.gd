@@ -12,6 +12,7 @@ const PANEL := {
 	"hold_per_char": 0.045, ## ...plus this per character
 	"announce_hold": 2.0,
 	"max_queue": 6, ## older lines are dropped if the player is drowning in them
+	"announce_queue_limit": 2, ## an announcement is skipped when this many lines are already waiting
 	"width": 250,
 	"portrait": 40,
 	"fade": 0.35,
@@ -67,6 +68,15 @@ func _ready() -> void:
 func push(text: String, mood: StringName = &"chipper") -> void:
 	if text.strip_edges() == "":
 		return
+	if mood == &"announce":
+		# Announcements are cheap status reports: never queue one behind real talk, or say the same twice.
+		if queue.size() >= PANEL.announce_queue_limit:
+			return
+		if (not current.is_empty() and current.text == text) or queue.any(func(e): return e.text == text):
+			return
+	else:
+		# A real line arriving makes waiting announcements stale.
+		queue = queue.filter(func(e): return e.mood != &"announce")
 	queue.append({"text": text, "mood": mood})
 	while queue.size() > PANEL.max_queue:
 		queue.pop_front()
@@ -117,9 +127,14 @@ func _start(entry: Dictionary) -> void:
 	_memo_head.visible = false
 	if is_memo:
 		var parts := text.split("\n", true, 1)
-		_memo_head.text = "%s  %s" % [Narrative.line("memo_header"), parts[0]]
+		if parts.size() > 1: # "RE: subject\nbody"
+			_memo_head.text = "%s  %s" % [Narrative.line("memo_header"), parts[0]]
+			text = parts[1]
+		else: # a one-line memo, perhaps already starting "MEMO:"
+			_memo_head.text = Narrative.line("memo_header")
+			text = text.trim_prefix("MEMO:").strip_edges()
 		_memo_head.visible = true
-		text = (parts[1] if parts.size() > 1 else "") + "\n- " + Narrative.line("memo_signoff")
+		text += "\n- " + Narrative.line("memo_signoff")
 		current.text = text
 	add_theme_stylebox_override("panel", EyegorUI.box(EyegorUI.COLORS.paper if is_memo else EyegorUI.COLORS.panel, MOOD_COLORS.get(mood, EyegorUI.COLORS.edge).darkened(0.3), 4))
 	_text.add_theme_color_override("font_color", EyegorUI.COLORS.paper_ink if is_memo else (EyegorUI.COLORS.text_dim if mood == &"announce" else EyegorUI.COLORS.text))

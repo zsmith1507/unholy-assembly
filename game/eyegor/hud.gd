@@ -34,6 +34,8 @@ var _banner_sub: Label
 var _banner_t := 0.0
 var _poll := 0.0
 var _spell_sig := ""
+var _detail: Label
+var _last_fragments := 0.0
 
 
 func _ready() -> void:
@@ -82,8 +84,15 @@ func _ready() -> void:
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_hint.offset_bottom = -30
+	_hint.offset_bottom = -46
 	add_child(_hint)
+	_detail = EyegorUI.label("", "small", -1, EyegorUI.COLORS.text_dim)
+	_detail.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_detail.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_detail.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_detail.offset_bottom = -30
+	add_child(_detail)
 	# bottom-left: Eyegor
 	panel = EyegorPanel.new()
 	panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -111,6 +120,7 @@ func _ready() -> void:
 	add_child(_banner)
 	Events.soul_collected.connect(_on_soul)
 	Events.milestone_reached.connect(show_banner)
+	_last_fragments = GameState.fragments
 	_refresh()
 
 
@@ -149,14 +159,19 @@ func _refresh() -> void:
 		_obj.text = ""
 	_refresh_spells()
 	_refresh_hint()
+	if GameState.fragments > _last_fragments + 0.001:
+		_popup(Narrative.line("popup_fragment" if GameState.fragments - _last_fragments < 1.5 else "popup_fragments", {"amount": int(round(GameState.fragments - _last_fragments))}), GameState.heart_pos if GameState.has_heart else Vector2.ZERO, EyegorUI.COLORS.text_dim)
+	_last_fragments = GameState.fragments
 
 
+## The Necromancer (group "player", from necro/install.gd), or null when there isn't one yet.
 func _necro() -> Node:
 	if not is_inside_tree():
 		return null
-	for n in get_tree().get_nodes_in_group(&"necro"):
-		if n.has_method("get_spells"):
-			return n
+	for g in [&"player", &"necro"]:
+		for n in get_tree().get_nodes_in_group(g):
+			if n.has_method("get_spells"):
+				return n
 	return null
 
 
@@ -164,6 +179,11 @@ func _refresh_spells() -> void:
 	var nec := _necro()
 	var spells: Array = nec.get_spells() if nec != null else []
 	var sel: StringName = nec.get_selected_spell() if nec != null and nec.has_method("get_selected_spell") else &""
+	var detail := ""
+	for s in spells:
+		if StringName(str(s.get("id", ""))) == sel:
+			detail = str(s.get("detail", ""))
+	_detail.text = detail
 	var sig := str(spells) + String(sel)
 	if sig == _spell_sig:
 		return
@@ -190,33 +210,37 @@ func _refresh_spells() -> void:
 		_spells.add_child(box)
 
 
+## What pressing interact would do: the Necromancer's own get_interact_hint(), else the nearest interactable.
 func _refresh_hint() -> void:
-	var nec := _necro()
-	var who: Node2D = nec as Node2D
-	if who == null and is_inside_tree():
-		var players := get_tree().get_nodes_in_group(&"player")
-		who = players[0] as Node2D if not players.is_empty() else null
 	_hint.text = ""
-	if who == null:
-		return
-	var best: Node = null
-	var best_d: float = HUD.hint_radius
-	for n in get_tree().get_nodes_in_group(&"interactable"):
-		if n is Node2D and n.has_method("interact_hint"):
-			var d: float = (n as Node2D).global_position.distance_to(who.global_position)
-			if d <= best_d:
-				best_d = d
-				best = n
-	if best != null:
-		_hint.text = "[%s] %s" % [EyegorUI.binding_name("interact", EyegorUI.using_gamepad), best.interact_hint()]
+	var nec := _necro()
+	var text := ""
+	if nec != null and nec.has_method("get_interact_hint"):
+		text = str(nec.get_interact_hint())
+	elif is_inside_tree():
+		var players := get_tree().get_nodes_in_group(&"player")
+		var who: Node2D = players[0] as Node2D if not players.is_empty() else null
+		if who == null:
+			return
+		var best_d: float = HUD.hint_radius
+		for n in get_tree().get_nodes_in_group(&"interactable"):
+			if n is Node2D and n.has_method("interact_hint"):
+				var d: float = (n as Node2D).global_position.distance_to(who.global_position)
+				if d <= best_d:
+					best_d = d
+					text = str(n.interact_hint())
+	if text != "":
+		_hint.text = "[%s] %s" % [EyegorUI.binding_name("interact", EyegorUI.using_gamepad), text]
 
 
-func _on_soul(amount: float, source: String, at: Vector2) -> void:
-	var frag := source == "fragment" or source.contains("critter")
+func _on_soul(amount: float, _source: String, at: Vector2) -> void:
 	var key := "popup_soul" if absf(amount - 1.0) < 0.01 else "popup_souls"
-	if frag:
-		key = "popup_fragment" if absf(amount - 1.0) < 0.01 else "popup_fragments"
-	var l := EyegorUI.label(Narrative.line(key, {"amount": EyegorUI.format_soul_number(amount)}), "display", EyegorUI.SIZES.body + 2, EyegorUI.COLORS.teal)
+	_popup(Narrative.line(key, {"amount": EyegorUI.format_soul_number(amount)}), at, EyegorUI.COLORS.teal)
+
+
+## A number that floats up from a world position (screen centre if there's none) and fades.
+func _popup(text: String, at: Vector2, color: Color) -> void:
+	var l := EyegorUI.label(text, "display", EyegorUI.SIZES.body + 2, color)
 	add_child(l)
 	var vp := get_viewport()
 	var screen := size * 0.5

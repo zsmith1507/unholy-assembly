@@ -16,12 +16,14 @@ var _sus_step := 0
 var _hun_step := 0
 var _mana_warned := false
 var _souls_banked := 0
+var _patrols: Node = null
+var _patrols_announced := 0
 
 
 func _ready() -> void:
+	# The Lair says its own lines for the heart's loss and each raising (heart_destroyed, altar_raised).
 	Events.heart_placed.connect(func(_a, _r): _ann("heart_placed"))
-	Events.heart_destroyed.connect(func(_a): Narrative.say_line("heart_destroyed", {}, &"concerned"))
-	Events.minion_raised.connect(func(_m): _ann("ghoul_raised"))
+	Events.body_harvested.connect(_on_harvested)
 	Events.machine_built.connect(_on_machine)
 	Events.soul_collected.connect(_on_soul)
 	Events.human_killed.connect(_on_killed)
@@ -31,24 +33,82 @@ func _ready() -> void:
 	Events.sighting.connect(func(_w, _o): _ann("seen"))
 	Events.night_started.connect(func(_d): _comment("night_started"))
 	Events.day_started.connect(func(_d): _comment("day_started"))
+	_hook_threats()
+
+
+## Suspicion and Patrols (autoload Threats, and its patrols node once that exists).
+func _hook_threats() -> void:
+	var th := get_node_or_null(^"/root/Threats")
+	if th == null:
+		return
+	if th.has_signal("raid_started") and not th.raid_started.is_connected(_on_raid):
+		th.raid_started.connect(_on_raid)
+	if th.has_signal("alarm_raised") and not th.alarm_raised.is_connected(_on_alarm):
+		th.alarm_raised.connect(_on_alarm)
+	if th.has_signal("depth_tier_reached") and not th.depth_tier_reached.is_connected(_on_depth):
+		th.depth_tier_reached.connect(_on_depth)
+
+
+func _process(_delta: float) -> void:
+	if _patrols != null and is_instance_valid(_patrols):
+		return
+	var th := get_node_or_null(^"/root/Threats")
+	var pn = th.get("patrols") if th != null else null
+	if pn is Node and is_instance_valid(pn) and pn.has_signal("patrol_left"):
+		_patrols = pn
+		pn.patrol_left.connect(_on_patrol_left)
+		pn.patrol_returned.connect(func(_p): _ann("patrol_gone"))
+
+
+func _on_patrol_left(p: Dictionary) -> void:
+	var th := get_node_or_null(^"/root/Threats")
+	var towns: Array = th.get("info").get("towns", []) if th != null and th.get("info") is Dictionary else []
+	var t := int(p.get("town", -1))
+	var town := String(towns[t].get("name", "")) if t >= 0 and t < towns.size() else ""
+	if town == "" or _patrols_announced > 0:
+		_ann("patrol_coming")
+	else:
+		_comment("patrol_left", &"concerned", true, {"town": town})
+	_patrols_announced += 1
+
+
+func _on_raid(_at: Vector2) -> void:
+	_comment("raid_started", &"concerned", true)
+
+
+func _on_alarm(_at: Vector2, _reason: String, _by: Node2D) -> void:
+	_comment("alarm_raised", &"concerned")
+
+
+func _on_depth(_tier: int, _tier_name: String) -> void:
+	_comment("depth_tier", &"concerned", true)
+
+
+## A graveyard body (not fresh) reaching the hand is a robbed grave.
+func _on_harvested(item: Node2D) -> void:
+	if item == null or not is_instance_valid(item):
+		return
+	var data = item.get("data")
+	if item.get("fresh") == false or (data is Dictionary and (data as Dictionary).get("fresh", true) == false):
+		_ann("grave_robbed", {}, 30.0)
 
 
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
-func _ann(key: String, args: Dictionary = {}) -> void:
-	if _now() - float(_last.get(key, -999.0)) < TALK.announce_cooldown:
+func _ann(key: String, args: Dictionary = {}, cooldown: float = -1.0) -> void:
+	if _now() - float(_last.get(key, -999.0)) < (cooldown if cooldown >= 0.0 else TALK.announce_cooldown):
 		return
 	_last[key] = _now()
 	Narrative.announce(key, args)
 
 
-func _comment(key: String, mood: StringName = &"chipper", force := false) -> void:
+func _comment(key: String, mood: StringName = &"chipper", force := false, args: Dictionary = {}) -> void:
 	if not force and _now() - _last_comment < TALK.comment_cooldown:
 		return
 	_last_comment = _now()
-	Narrative.say_line(key, {}, mood)
+	Narrative.say_line(key, args, mood)
 
 
 func _on_machine(m: Node2D) -> void:

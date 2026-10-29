@@ -7,19 +7,22 @@ class FakeNecro:
 	extends Node2D
 
 	func _init() -> void:
-		add_to_group(&"necro")
+		add_to_group(&"player")
 
 	func get_spells() -> Array:
 		return [
 			{"id": &"dig", "name": "Dig", "cost_text": "0.05", "color": Color("c8a070")},
 			{"id": &"harvest", "name": "Harvest", "cost_text": "0.1", "color": Color("5fe0cc")},
 			{"id": &"siphon", "name": "Siphon", "cost_text": "+", "color": Color("9a2a2a")},
-			{"id": &"build", "name": "Build", "cost_text": "0.2", "color": Color("e0b860")},
+			{"id": &"build", "name": "Build", "cost_text": "0.2", "color": Color("e0b860"), "detail": "Corpse Grinder"},
 			{"id": &"command_dig", "name": "Dig Order", "cost_text": "", "color": Color("a462e8")},
 		]
 
 	func get_selected_spell() -> StringName:
-		return &"harvest"
+		return &"build"
+
+	func get_interact_hint() -> String:
+		return Narrative.line("hint_heart", {"souls": "3.0"})
 
 
 func _ready() -> void:
