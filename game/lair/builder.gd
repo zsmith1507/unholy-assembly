@@ -13,6 +13,8 @@ const BUILD := {
 		&"spike_trap": {"mana": 0.1},
 	},
 	"floor_fraction": 0.7, # share of the footprint's bottom row that must stand on solid ground
+	"floor_give_px": 8.0, # dug floors are bumpy: bumps this high inside the footprint are levelled when it is
+		# built, and a column counts as standing if ground is within this far below the footprint
 	"overlap_margin_px": 2.0,
 }
 
@@ -66,16 +68,23 @@ func why_not(kind: StringName, at: Vector2) -> String:
 	var x1 := floori((rect.end.x - 0.01) / c)
 	var y0 := floori(rect.position.y / c)
 	var y1 := floori((rect.end.y - 0.01) / c)
+	var give := int(float(BUILD.floor_give_px) / c)
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
-			# Liquids (blood the grinder splashes, puddles) don't block a build; earth and stone do.
-			if not w.in_bounds(x, y) or not (w.is_empty(x, y) or w.is_liquid(x, y)):
+			if not w.in_bounds(x, y):
 				return "not_dug"
+			# Air, gas and liquid (blood the grinder splashes) never block. Ground does, except low bumps
+			# in the bottom few rows, which the build levels.
+			if not (w.is_empty(x, y) or w.is_liquid(x, y)):
+				if y <= y1 - give or SandWorld.mat_hardness(w.get_mat(x, y)) <= 0.0:
+					return "not_dug"
 	var floor_y := y1 + 1
 	var solid := 0
 	for x in range(x0, x1 + 1):
-		if w.is_solid(x, floor_y):
-			solid += 1
+		for y in range(y1 - give + 1, floor_y + give + 1):
+			if w.is_solid(x, y):
+				solid += 1
+				break
 	if float(solid) < float(x1 - x0 + 1) * float(BUILD.floor_fraction):
 		return "no_floor"
 	for s in get_tree().get_nodes_in_group(&"lair_structures"):
@@ -98,6 +107,7 @@ func place(kind: StringName, at: Vector2) -> Node2D:
 		_:
 			s = LairMachine.make(kind)
 	s.heart = GameState.heart if kind != &"heart" else null
+	_level(kind, at)
 	var parent := parent_layer if parent_layer != null else Lair.layer(get_tree(), "buildings", self)
 	s.position = at
 	parent.add_child(s)
@@ -106,3 +116,21 @@ func place(kind: StringName, at: Vector2) -> Node2D:
 		Events.machine_built.emit(s)
 	GameState.count("built_" + String(kind))
 	return s
+
+
+## Clears the low bumps of ground inside a footprint, so the structure stands on a level plot.
+func _level(kind: StringName, at: Vector2) -> void:
+	var fp := footprint(kind)
+	var w := Sim.world
+	if w == null:
+		return
+	var c := Sim.CELL
+	var x0 := floori((at.x - fp.x * 0.5) / c)
+	var x1 := floori((at.x + fp.x * 0.5 - 0.01) / c)
+	var y0 := floori((at.y - fp.y) / c)
+	var y1 := floori((at.y - 0.01) / c)
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			if w.is_solid(x, y):
+				w.set_mat(x, y, SandWorld.M_EMPTY)
+	w.wake_rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
