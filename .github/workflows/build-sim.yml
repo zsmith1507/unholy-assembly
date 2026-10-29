@@ -57,8 +57,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.platform }}
+          # only this platform's libraries: the checkout also holds the old ones for the other platforms,
+          # and uploading those let the last artifact copied overwrite the fresh builds
           path: |
-            game/bin/libunholy_sim.*
+            game/bin/libunholy_sim.${{ matrix.platform }}.*
           if-no-files-found: error
 
   commit:
