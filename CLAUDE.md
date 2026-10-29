@@ -5,7 +5,8 @@ Unholy Assembly is a 2D necromancer factory sim on a falling-sand world. Zach is
 ## Workflow (Zach's choice)
 
 - **This repo is the only source of truth.** Edit the prototypes here; don't publish them as separate Claude-hosted pages.
-- **Commit and push straight to `main`** after each change Zach asks for, one commit per change, with a message saying what changed and why. GitHub Pages serves `main`, so the live links update a minute or two after a push:
+- **Commit and push straight to `main`** after each change Zach asks for, one commit per change, with a message saying what changed and why. GitHub Pages is published by the "Web build" workflow (`.github/workflows/web.yml`) on every push to `main`; it rebuilds the browser version of the game and republishes the prototypes, so the live links update about 10 minutes after a push:
+  - https://zsmith1507.github.io/unholy-assembly/play/ (the Godot game in the browser)
   - https://zsmith1507.github.io/unholy-assembly/prototypes/proving-ground.html
   - https://zsmith1507.github.io/unholy-assembly/prototypes/charnel-pit.html
 - **Before every push of Godot work, run `tools/godot-check.sh`** (import, every department's tests, a ten-second boot); it must pass. Godot 4.7.1 must be on the PATH as `godot`.
