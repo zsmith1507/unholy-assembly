@@ -58,6 +58,7 @@ const NOISE := {
 	"listen_px": 420.0, # people (or a town) this close to where it surfaces hear it fully
 	"nobody_near": 0.35, # share that still spreads as rumour when nobody is close
 	"min_amount": 0.0005, # ignore anything smaller
+	"stops_fading_at": 0.004, # a noise costing less than this still adds up, but doesn't stop Suspicion fading
 }
 
 ## How much one cell of each material muffles noise and stench, compared with packed earth (1.0).
@@ -507,7 +508,7 @@ func _on_noise(at: Vector2, loudness: float, source: String) -> void:
 	var how := "at the surface" if earth.cells == 0 else "muffled by %d cells of %s" % [earth.cells, earth.what]
 	if not c.near:
 		how += ", nobody near to hear"
-	add_suspicion(c.amount, "noise:" + source, "%s noise, %s" % [source, how])
+	add_suspicion(c.amount, "noise:" + source, "%s noise, %s" % [source, how], c.amount >= NOISE.stops_fading_at)
 
 
 func _listener_near(p: Vector2) -> bool:

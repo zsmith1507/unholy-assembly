@@ -5,7 +5,7 @@ extends Node2D
 const DEMO := {
 	"w": 340, "h": 200, "ground": 90, # cells
 	"heart_cell": Vector2i(220, 150),
-	"noise_every_s": 1.0, "noise_loudness": 4.0,
+	"noise_every_s": 1.0, "noise_loudness": 0.7, # the grinder, as Lair reports it
 	"time_scale_s": 1.0, # demo seconds per frame-second
 }
 
