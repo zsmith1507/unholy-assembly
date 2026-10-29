@@ -48,14 +48,20 @@ An installer is a script that `extends RefCounted` with `func install(main: Main
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `necro_spawn` | Vector2 | Where the necromancer starts, feet position |
+| `necro_spawn` | Vector2 | Where the necromancer starts, feet position: the middle of the forest between the two towns |
 | `surface_y_px` | float | Typical surface height (pixels), for quick checks |
 | `surface_at` | Callable(x_px) -> float | Surface height at an x, from the generated heightmap |
 | `graveyard` | Rect2 | The town cemetery, in pixels; coffins are buried under it |
 | `graves` | Array[Vector2] | Each buried coffin's centre, pixels |
-| `towns` | Array[Dictionary] | `{name, rect: Rect2, side: -1 or 1, homes: Array[Dictionary]}`; a home is `{id, rect, residents: int, alive: int}` |
+| `towns` | Array[Dictionary] | `{name, rect: Rect2, side: -1 or 1, fields: Rect2, homes: Array[Dictionary]}`; a home is `{id, rect, residents: int, alive: int, door: Vector2 (floor level, px), town: String}` |
 | `critter_zones` | Array[Rect2] | Forest areas where critters spawn |
-| `patrol_routes` | Array[PackedVector2Array] | Surface paths patrols walk |
+| `patrol_routes` | Array[PackedVector2Array] | Surface paths patrols walk (one per town, out to just past the forest middle, plus one across the graveyard) |
+| `world_seed` | int | The seed the world was generated from (World's default is 666) |
+| `settlements` | Node | The settlements node (same as the `settlements` group hook) |
+| `battlefield` | Rect2 | The old battlefield, pixels |
+| `catacomb` | Rect2 | The deep catacomb, pixels |
+| `lair_builder` | Node | Added by Lair's installer: the builder (same as the `lair_builder` group hook) |
+| `flesh_spawner` | Node | Added by Bodies and Souls' installer: the spawner (same as the `flesh_spawner` group hook) |
 
 ## Autoloads (global services)
 
@@ -74,14 +80,14 @@ These are the only places departments call each other directly. Everything else 
 
 | Hook | Provided by | Used by | Shape |
 | --- | --- | --- | --- |
-| Lair builder | Lair: a node in group `lair_builder`, added by `lair/install.gd` | Necromancer's build spell | `can_place(kind: StringName, at: Vector2) -> bool`, `place(kind, at) -> Node2D` (null if refused), `cost(kind) -> Dictionary` (e.g. `{"mana": 0.2}`), `kinds() -> Array[StringName]` (`&"heart"`, `&"grinder"`, `&"stitching_table"`, `&"altar"`, `&"spike_trap"`) |
+| Lair builder | Lair: a node in group `lair_builder`, added by `lair/install.gd` | Necromancer's build spell | `can_place(kind: StringName, at: Vector2) -> bool`, `place(kind, at) -> Node2D` (null if refused), `cost(kind) -> Dictionary` (e.g. `{"mana": 0.2}`), `kinds() -> Array[StringName]` (`&"heart"`, `&"grinder"`, `&"stitching_table"`, `&"altar"`, `&"spike_trap"`); optional `footprint(kind) -> Vector2` (pixels) and `why_not(kind, at) -> String` (`""` if placeable, else `not_dug`, `no_floor`, `overlap`, `out_of_range`, `one_heart`). `at` is the middle of the footprint's bottom edge. Liquid in a footprint doesn't block it, and bumps up to `BUILD.floor_give_px` high are levelled when it is built |
 | Interactables | Lair (heart, machines, altar) and anyone else | Necromancer's interact key | Node in group `interactable` with `interact(by: Node2D) -> void` and `interact_hint() -> String`; the necromancer uses the nearest one within 24 px |
 | Pullables | Bodies and Souls (corpses, parts, critters, living humans), Lair (items) | Necromancer's Harvest spell | Node in group `pullable` with `apply_pull(force: Vector2) -> void` (pixels per tick², applied for one tick). Living humans resist by their `fear` and `brace`. |
 | Siphonable | Bodies and Souls (corpses, parts) | Necromancer's Siphon spell | Node in group `siphonable` with `siphon(amount: float) -> float` returning mana gained in souls' worth; the thing turns to ash as it empties. Blood on the ground is siphoned straight from the sim. |
 | Flesh spawner | Bodies and Souls: node in group `flesh_spawner` | Threats (patrols), Lair (testing) | `spawn_human(kind: StringName, at: Vector2) -> Actor` (`&"farmer"`, `&"villager"`), `spawn_critter(kind, at) -> Actor` (`&"rabbit"`, `&"crow"`, `&"deer"`), `spawn_soul_orb(at: Vector2, amount: float, source: String) -> Node2D` |
 | Human orders | Bodies and Souls (human actors) | Threats | `set_route(points: PackedVector2Array)`, `investigate(at: Vector2)`, `set_mode(mode: StringName)` (`&"home"`, `&"work"`, `&"patrol"`, `&"flee"`, `&"attack"`), `fear: float` 0–1, signal `noticed(what: Node2D)` |
 | Spell list | Necromancer (node in group `necro`) | HUD | `get_spells() -> Array` of `{id, name, cost_text, color}`, `get_selected_spell() -> StringName`; emits `Events.spell_selected` |
-| Settlements | World: node in group `settlements` | Threats, Bodies and Souls | `homes() -> Array[Dictionary]`, `resident_died(home_id: int)`, `home_at(pos: Vector2) -> Dictionary`; homes decay when empty and slowly refill |
+| Settlements | World: node in group `settlements` | Threats, Bodies and Souls | `homes() -> Array[Dictionary]`, `resident_died(home_id: int)`, `home_at(pos: Vector2) -> Dictionary`; homes decay when empty and slowly refill. Signals `home_emptied(home)` (the last resident died; the home starts to decay) and `resident_arrived(home)` (a newcomer moved in; Bodies and Souls puts a new human there) |
 | Lighting | Art: node in group `lighting` | Lair, Necromancer, World | `add_light(node: Node2D, color: Color, radius_px: float, energy: float) -> PointLight2D` so everyone's lights share one look |
 
 Souls rule (from the design doc): a human's soul is collected only if the necromancer is within `SOULS.witness_radius` of the death, or the death is inside the heart's range, where the orb drifts home by itself. Bodies and Souls implements this in its soul orb.
@@ -109,7 +115,19 @@ wake_rect(x, y, w, h) · active_chunk_count()
 SandWorld.mat_name(mat) · SandWorld.mat_kind(mat) · SandWorld.mat_hardness(mat)   (static)
 ```
 
-Pixel Physics may add methods; it does not change these.
+Added by Pixel Physics:
+
+```
+take_crush_events() -> Array of {rect: Rect2i, force: float, landed: bool, cells: int, speed: float}
+    ground that broke loose and is falling or just landed since the last call (a falling chunk reports each
+    tick it moves, and once more when it lands; force = speed x cells x CRUSH.force_per)
+get_heat(x, y) -> float · add_heat(cx, cy, r, amount)      heat field (about 7 lights wood, 3 tallow)
+get_stain(x, y) -> int                                      which liquid stained this cell (0 = clean)
+is_burning(x, y) -> bool                                    a cell on fire right now
+falling_chunk_count() -> int · particle_count() -> int      for debug overlays and tests
+```
+
+Pixel Physics may add methods; it does not change these. Ground only breaks loose when `dig()`, `explode()` or fire cuts it free; nothing caves in by itself.
 
 ## Rules every department follows
 
@@ -117,7 +135,8 @@ Pixel Physics may add methods; it does not change these.
 - **Player-facing text goes through `Narrative`.** Use `Narrative.say()` for Eyegor lines and `Narrative.line()` for labels; the Eyegor department writes the words.
 - **Noise and sightings go through `Events`.** Emit `Events.noise_made(at, loudness, source)` when your thing is loud; Threats decides what it costs.
 - **Content boundary from the design doc:** no children on screen, ever. Every human who appears is an adult. Gore stays pixel-chunky.
-- **Tests:** put headless tests in `game/<dept>/tests/test_*.gd` (see `game/tests/runner.gd`). Run everything with `tools/godot-check.sh`.
+- **Tests:** put headless tests in `game/<dept>/tests/test_*.gd` (see `game/tests/runner.gd`). Run everything with `tools/godot-check.sh`. A test file that doesn't compile, makes no checks, logs an engine or script error, or runs past its time limit (120 s of game time; set `const TEST_TIMEOUT_S` to change it) fails, and the run moves on.
+- **The hidden start, played:** `game/tests/test_hidden_start.gd` plays the opening on the real generated world with every department's real nodes (`game/tests/hidden_start.gd` holds the steps). Where it has to help (mana topped up, a thing carried by hand) it prints an `ASSIST` line; fewer assists means a more playable start. `game/tests/drive_hidden_start.gd` plays the same steps in `shot.tscn` and saves a screenshot after each.
 - **Screenshots** (to see what you built): `xvfb-run -a godot --path game --rendering-driver opengl3 --fixed-fps 60 res://tests/shot.tscn -- --scene=res://main/main.tscn --frames=180 --out=/tmp/shot.png`.
 
 ## Building the C++ sim
