@@ -35,3 +35,4 @@ game/bin/libunholy_sim.*
 game/bin/*.lib
 game/bin/*.exp
 game/bin/*.pdb
+native/build/
