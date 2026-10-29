@@ -2,6 +2,8 @@
 import humans
 import beasts
 import parts
+import machines
+import eyegor
 from pix import write_sprite
 
 SPRITES = {
@@ -16,6 +18,11 @@ SPRITES = {
     "pig": (beasts.pig_frames, {}),
     "chicken": (beasts.chicken_frames, {}),
 }
+SPRITES.update(machines.SPRITES)
+SPRITES.update(eyegor.SPRITES)
+# lair items (game/lair/lair_item.gd SIZES): one still frame each
+for _k, _a in machines.items().items():
+    SPRITES[_k] = ((lambda a=_a: a), {})
 
 if __name__ == "__main__":
     import sys

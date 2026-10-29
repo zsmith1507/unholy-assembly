@@ -19,14 +19,32 @@ const SIZES := {
 	"deer": [30, 34, Color("7a5a3a")],
 	"pig": [22, 16, Color("b08070")],
 	"chicken": [10, 12, Color("c8c0a8")],
-	"eyegor": [40, 40, Color("d8d0b8")],
+	"eyegor": [36, 36, Color("d8d0b8")],
+	"eyegor_portrait": [96, 96, Color("d8d0b8")],
 	"heart": [40, 48, Color("2f8a7e")],
 	"grinder": [48, 48, Color("5a5048")],
 	"stitching_table": [56, 32, Color("6a4a3a")],
 	"altar": [48, 40, Color("3a3444")],
 	"spike_trap": [24, 10, Color("8a8a90")],
-	"soul_orb": [8, 8, Color("7fe8d8")],
+	"soul_orb": [12, 14, Color("7fe8d8")],
+	# lair items (game/lair/lair_item.gd SIZES)
+	"corpse": [26, 8, Color("a89878")],
+	"stitched_body": [26, 9, Color("7f8c69")],
+	"part": [10, 6, Color("b98f72")],
+	"gibs": [10, 8, Color("5a4b3c")],
+	"bones": [12, 6, Color("ddd2bf")],
+	"meat": [8, 6, Color("6e2f3a")],
 }
+
+## Every sprite with real art, by kind. Machines play "idle" at rest and "work" while running; the spike trap
+## shows "idle" armed and "work" sprung. Eyegor's portrait has idle, talk, concerned, proud and memo.
+const CHARACTERS := ["necromancer", "ghoul", "rotling", "farmer", "villager"]
+const CRITTERS := ["rabbit", "crow", "deer", "pig", "chicken"]
+const MACHINES := ["heart", "grinder", "stitching_table", "altar", "spike_trap"]
+const ITEMS := ["corpse", "stitched_body", "part", "gibs", "bones", "meat", "soul_orb"]
+const UI := ["eyegor", "eyegor_portrait"]
+## Looks with severed-part art for body_parts().
+const BODY_LOOKS := ["villager", "farmer", "ghoul", "rotling"]
 
 static var _cache := {}
 
@@ -103,10 +121,15 @@ static func make_sprite(sprite_name: String) -> AnimatedSprite2D:
 
 
 ## Body-part textures for dismemberment: {"head", "torso", "arm", "leg"} -> Texture2D.
+## Drawn upright (crown / neck / shoulder / hip at the top) at the rig's bone lengths (head 12, torso 21,
+## arm 19, leg 25 px), so BodyRig stretches them by about 0.9-1.0 and they stay crisp. Unknown looks fall
+## back to villager parts, so any human renders.
 static func body_parts(sprite_name: String) -> Dictionary:
 	var out := {}
 	for part in ["head", "torso", "arm", "leg"]:
 		var path := "res://art/sprites/%s_%s.png" % [sprite_name, part]
+		if not ResourceLoader.exists(path):
+			path = "res://art/sprites/villager_%s.png" % part
 		if ResourceLoader.exists(path):
 			out[part] = load(path)
 		else:

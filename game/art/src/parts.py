@@ -1,4 +1,6 @@
 """Severed body parts (head, torso, arm, leg) for ArtLib.body_parts, drawn with the same rig and palette."""
+import copy
+
 import numpy as np
 import humans as H
 from pix import P, add, mul, scratch, write_png
@@ -21,6 +23,9 @@ def _stump(c, p, r=1.6):
     c.paint(m, P["blood"] if "blood" in P else (90, 20, 24, 255))
 
 
+RIG_FIT = dict(thigh=9.0, shin=9.0, upper=6.5, fore=6.5, torso=11.5, head_r=3.3)
+
+
 def parts_for(kind):
     if kind in ("ghoul", "rotling"):
         s, k = H.GHOUL_SPEC, H.GHOUL_SKIN[kind]
@@ -32,6 +37,11 @@ def parts_for(kind):
         skin, skin_s, arm, arm_s = k["skin"], k["skin_s"], k["skin"], k["skin_s"]
         shirt, shirt_s, trous, trous_s, boot, boot_s = k["shirt"], k["shirt_s"], k["trousers"], k["trousers_s"], k["boots"], k["boots_s"]
         hair, eye, style = k["hair"], P["void"], "short"
+    # Bodies and Souls' rig (game/flesh/body_rig.gd RIG) has bones leg 24, torso 20, head 10, arm 18 px and
+    # stretches each texture to its bone, so the parts are drawn at those lengths to stay crisp (scale ~1).
+    s = copy.copy(s)
+    for k, v in RIG_FIT.items():
+        setattr(s, k, v)
     j = solve(s, base_pose(lean=0.0, ua_f=0.0, fa_f=0.0, th_f=0.0, sh_f=0.0, head=0.0))
     out = {}
     c = scratch(120, (60, 90))

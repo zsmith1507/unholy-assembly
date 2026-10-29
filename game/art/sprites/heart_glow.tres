@@ -1,0 +1,58 @@
+[gd_resource type="SpriteFrames" load_steps=15 format=3]
+
+[ext_resource type="Texture2D" path="res://art/sprites/heart_glow.png" id="1"]
+
+[sub_resource type="AtlasTexture" id="f0_0"]
+atlas = ExtResource("1")
+region = Rect2(0, 0, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f0_1"]
+atlas = ExtResource("1")
+region = Rect2(40, 0, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f0_2"]
+atlas = ExtResource("1")
+region = Rect2(80, 0, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f0_3"]
+atlas = ExtResource("1")
+region = Rect2(120, 0, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f0_4"]
+atlas = ExtResource("1")
+region = Rect2(160, 0, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f0_5"]
+atlas = ExtResource("1")
+region = Rect2(200, 0, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f1_0"]
+atlas = ExtResource("1")
+region = Rect2(0, 48, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f1_1"]
+atlas = ExtResource("1")
+region = Rect2(40, 48, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f1_2"]
+atlas = ExtResource("1")
+region = Rect2(80, 48, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f1_3"]
+atlas = ExtResource("1")
+region = Rect2(120, 48, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f1_4"]
+atlas = ExtResource("1")
+region = Rect2(160, 48, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f1_5"]
+atlas = ExtResource("1")
+region = Rect2(200, 48, 40, 48)
+
+[sub_resource type="AtlasTexture" id="f2_0"]
+atlas = ExtResource("1")
+region = Rect2(0, 96, 40, 48)
+
+[resource]
+animations = [{"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"idle", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f1_0")}, {"duration": 1.0, "texture": SubResource("f1_1")}, {"duration": 1.0, "texture": SubResource("f1_2")}, {"duration": 1.0, "texture": SubResource("f1_3")}, {"duration": 1.0, "texture": SubResource("f1_4")}, {"duration": 1.0, "texture": SubResource("f1_5")}], "loop": true, "name": &"work", "speed": 9.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f2_0")}], "loop": true, "name": &"hurt", "speed": 6.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"walk", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"run", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": false, "name": &"jump", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"fall", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"cast", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"carry", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": false, "name": &"die", "speed": 7.0}, {"frames": [{"duration": 1.0, "texture": SubResource("f0_0")}, {"duration": 1.0, "texture": SubResource("f0_1")}, {"duration": 1.0, "texture": SubResource("f0_2")}, {"duration": 1.0, "texture": SubResource("f0_3")}, {"duration": 1.0, "texture": SubResource("f0_4")}, {"duration": 1.0, "texture": SubResource("f0_5")}], "loop": true, "name": &"swim", "speed": 7.0}]
