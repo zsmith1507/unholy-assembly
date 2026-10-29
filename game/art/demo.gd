@@ -1,7 +1,7 @@
 extends Node2D
 ## Mood demo: a slice of surface at night over a teal-lit lair. No sim needed.
 ##   xvfb-run -a godot --path game --rendering-driver opengl3 res://tests/shot.tscn -- --scene=res://art/demo.tscn --frames=120 --out=/tmp/unholy-shots/art.png
-## --hour=<h> on the command line pins the time of day.
+## --hour=<h> on the command line pins the time of day; --cam_y=<y> moves the camera (260 shows the lair).
 
 const SURFACE := 150.0
 
@@ -14,6 +14,8 @@ func _ready() -> void:
 		if a.begins_with("--hour="): hour = float(a.substr(7))
 	var cam := Camera2D.new()
 	cam.position = Vector2(320, 180)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--cam_y="): cam.position.y = float(a.substr(8))
 	add_child(cam)
 	cam.make_current()
 	lighting = ArtLighting.new()

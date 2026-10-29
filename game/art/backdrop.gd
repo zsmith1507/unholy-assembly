@@ -7,6 +7,7 @@ var surface_y := 0.0
 var override_hour := -1.0
 var lighting: ArtLighting
 var _mist: CPUParticles2D
+var _dust: CPUParticles2D
 var _rng := RandomNumberGenerator.new()
 var _trees_far := PackedFloat32Array()
 var _trees_near := PackedFloat32Array()
@@ -40,6 +41,29 @@ func _ready() -> void:
 	_mist.scale_amount_max = 1.2
 	_mist.z_index = 30  # in front of the background, still on its layer
 	add_child(_mist)
+	# underground: slow motes of dust drifting through the dark (teal-tinted by the necrotic air)
+	_dust = CPUParticles2D.new()
+	_dust.amount = 36
+	_dust.lifetime = 12.0
+	_dust.preprocess = 12.0
+	_dust.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	_dust.emission_rect_extents = Vector2(340, 200)
+	_dust.direction = Vector2(0.3, 1)
+	_dust.spread = 40.0
+	_dust.gravity = Vector2.ZERO
+	_dust.initial_velocity_min = 1.0
+	_dust.initial_velocity_max = 4.0
+	var dimg := Image.create_empty(1, 1, false, Image.FORMAT_RGBA8)
+	dimg.fill(Color.WHITE)
+	_dust.texture = ImageTexture.create_from_image(dimg)
+	var dg := Gradient.new()
+	dg.set_color(0, Color(0.55, 0.8, 0.75, 0.0))
+	dg.set_color(1, Color(0.55, 0.8, 0.75, 0.0))
+	dg.add_point(0.5, Color(0.6, 0.85, 0.8, 0.35))
+	_dust.color_ramp = dg
+	_dust.use_parent_material = true
+	_dust.z_index = 30
+	add_child(_dust)
 
 
 func _hour() -> float:
@@ -55,6 +79,7 @@ func _process(_d: float) -> void:
 		global_position = cam.get_screen_center_position()
 	_mist.position = Vector2(0, surface_y - global_position.y - 10)
 	_mist.visible = global_position.y < surface_y + 200
+	_dust.visible = global_position.y > surface_y + 80
 	queue_redraw()
 
 
