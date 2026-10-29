@@ -40,6 +40,7 @@ class Ctx:
 const TIMEOUT := {
 	"game_seconds": 120.0,
 	"wall_seconds": 300.0,
+	"seed": 1507, ## every test file starts from this random seed
 }
 
 
@@ -90,6 +91,8 @@ func _ready() -> void:
 		ctx.root = Node2D.new()
 		add_child(ctx.root)
 		GameState.reset()
+		# Same randomness for a test whatever ran before it (grinder blood, critter picks, loose dirt).
+		seed(TIMEOUT.seed)
 		var limit := timeout_s
 		var consts: Dictionary = test.get_script().get_script_constant_map()
 		if consts.has("TEST_TIMEOUT_S"):
