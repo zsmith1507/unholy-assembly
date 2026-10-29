@@ -6,7 +6,7 @@ A 2D side-scrolling factory sim with a gothic, gallows-humour streak. You play a
 
 1. Install [Godot 4.7](https://godotengine.org/download).
 2. In Godot's project manager, choose **Import**, pick `game/project.godot` from this repository, and open it.
-3. Press **Play** (F5, or the triangle at the top right).
+3. Press **Play** (F5, or the triangle at the top right), then start from the title screen.
 
 The pixel simulation is a C++ extension. GitHub Actions builds it for Windows, Linux and macOS and commits the libraries to `game/bin/`, so there is nothing to compile: pull the latest `main` and press Play.
 
@@ -22,6 +22,9 @@ The pixel simulation is a C++ extension. GitHub Actions builds it for Windows, L
 | Right mouse button | Left trigger | The spell's second use: Build picks the next building, Dig Here and Stockpile cancel a drag or pick the resource |
 | E | X | Use the thing you stand next to: refill mana at the heart, touch the altar to raise, visit a striking ghoul |
 | 1 to 6, Tab, mouse wheel | Bumpers | Choose a spell |
+| F1 | View | Eyegor's clipboard: your checklist and his recent lines (the game keeps running) |
+| Esc or P | Start | Pause menu (and the controls card) |
+| F3 | | Debug overlay: Suspicion and Hunger and why they moved |
 
 The spells, in order:
 
@@ -34,7 +37,7 @@ The spells, in order:
 
 **The opening (the hidden start):** dig down into the forest floor and hollow out a hall, Build the heart in it, rob a coffin in the graveyard, feed the corpse to the grinder, carry the gibs and bones to the stitching table and the stitched body to the altar, then touch the altar (E) to raise your first ghoul. Mark ground with Dig Here and the ghoul digs it. Critters in the woods give soul fragments; five make a soul. The heart's souls refill your mana.
 
-Pause, Eyegor's clipboard (F1) and the HUD arrive with the Eyegor and HUD department.
+The game opens on a title screen; Eyegor's checklist walks you through the opening.
 
 The game is being built department by department (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)); the design is in [docs/design-doc.md](docs/design-doc.md).
 
