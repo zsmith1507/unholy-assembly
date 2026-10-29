@@ -36,7 +36,7 @@ func _ready() -> void:
 
 
 func reset() -> void:
-	souls = 0.0
+	souls = ECON.start_souls
 	fragments = 0.0
 	mana = ECON.start_mana
 	max_mana = ECON.start_max_mana
