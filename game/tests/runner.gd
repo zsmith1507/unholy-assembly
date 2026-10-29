@@ -43,7 +43,25 @@ const TIMEOUT := {
 }
 
 
+## Counts engine and script errors while a test runs, so a test that errors part-way fails even when
+## its coroutine returns early with no failed checks.
+class ErrorCounter extends Logger:
+	var count := 0
+
+	func _log_error(_function: String, _file: String, _line: int, _code: String, _rationale: String,
+			_editor_notify: bool, error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		if error_type == ERROR_TYPE_ERROR or error_type == ERROR_TYPE_SCRIPT:
+			count += 1
+
+	func _log_message(_message: String, _error: bool) -> void:
+		pass
+
+
+var _errors := ErrorCounter.new()
+
+
 func _ready() -> void:
+	OS.add_logger(_errors)
 	var args := OS.get_cmdline_user_args()
 	var files: Array[String] = []
 	var timeout_s: float = TIMEOUT.game_seconds
@@ -60,6 +78,7 @@ func _ready() -> void:
 	var broken: Array[String] = []
 	for f in files:
 		print("TEST ", f)
+		var errors0 := _errors.count
 		var test = _instantiate(f)
 		if test == null:
 			total_fail += 1
@@ -90,6 +109,14 @@ func _ready() -> void:
 			print("    FAIL  did not finish within %.0f s of game time (hung, or stopped by a script error above)" % limit)
 			ctx.failures += 1
 			broken.append(f)
+		if _errors.count > errors0:
+			print("    FAIL  %d engine or script errors while it ran (see above)" % (_errors.count - errors0))
+			ctx.failures += 1
+			if not broken.has(f):
+				broken.append(f)
+		elif ctx.checks == 0:
+			print("    FAIL  made no checks")
+			ctx.failures += 1
 		ctx.root.queue_free()
 		Sim.world = null
 		await get_tree().process_frame
