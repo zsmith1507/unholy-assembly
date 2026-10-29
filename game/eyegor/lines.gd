@@ -1,0 +1,318 @@
+extends RefCounted
+## Every player-facing word in the slice, keyed by line id. Owned by the Eyegor and HUD department.
+## How Eyegor writes is in VOICE.md. Get a line with Narrative.line("key", {args}).
+##
+## A value is a String or an Array of Strings (Narrative picks one variant at random).
+## {name} placeholders are filled from the args Dictionary.
+## Key families:
+##   obj_<id> / intro_<id> / done_<id> / milestone_<id>   the hidden-start objectives (objectives.gd)
+##   item_<kind>, item_part_<part>                          describe_item()
+##   build_<kind>, desc_<kind>, hint_<verb>                 machines and interact hints (Lair may use these)
+##   spell_<id>                                             spell names (Necromancer may use these)
+##   memo_<topic>                                           HR memos; the first line "RE: ..." is the subject
+##   hud_*, title_*, pause_*, controls_*                    screen labels
+
+const MISSION := "Bringing Eternal Life to a Village Near You, Since 1197."
+
+const LINES := {
+	# ------------------------------------------------------------ the company
+	"mission": MISSION,
+	"game_title": "Unholy Assembly",
+	"advisor_name": "Eyegor",
+	"advisor_title": "Director of Undying Resources",
+	"memo_header": "MEMO",
+	"memo_signoff": "Eyegor, Director of Undying Resources",
+	"banner_milestone": "Milestone Reached",
+	"banner_all_done": "Onboarding Complete",
+
+	# ------------------------------------------------------------ title, loading, pause, controls
+	"title_begin": "Begin",
+	"title_controls": "Controls",
+	"title_quit": "Quit",
+	"title_prompt": "Press {key} to begin",
+	"loading": [
+		"Loading. Please hold. Your afterlife is important to us.",
+		"Digging graves. Mostly other people's.",
+		"Polishing the clipboard.",
+		"Counting souls. Then counting them again.",
+	],
+	"pause_title": "Paused",
+	"pause_subtitle": "The dead can wait. They're very good at it.",
+	"pause_resume": "Resume",
+	"pause_controls": "Controls",
+	"pause_quit": "Quit to Desktop",
+	"controls_title": "Controls",
+	"controls_back": "Back",
+	"controls_keyboard": "Keyboard & Mouse",
+	"controls_gamepad": "Gamepad",
+	"ctl_move": "Move",
+	"ctl_jump": "Jump",
+	"ctl_cast": "Cast spell",
+	"ctl_cast_alt": "Cancel / alternate",
+	"ctl_aim": "Aim",
+	"ctl_interact": "Interact",
+	"ctl_spells": "Change spell",
+	"ctl_advisor": "Eyegor's clipboard",
+	"ctl_pause": "Pause",
+
+	# ------------------------------------------------------------ HUD labels
+	"hud_mana": "Mana",
+	"hud_heart": "Heart",
+	"hud_no_heart": "No heart yet",
+	"hud_fragments": "Fragments",
+	"hud_suspicion": "Suspicion",
+	"hud_hunger": "Hunger",
+	"hud_day": "Day {day}",
+	"hud_objective": "Objective",
+	"hud_soul_unit": "soul",
+	"hud_souls_unit": "souls",
+	"phase_dawn": "Dawn",
+	"phase_day": "Day",
+	"phase_dusk": "Dusk",
+	"phase_night": "Night",
+	"popup_soul": "+{amount} soul",
+	"popup_souls": "+{amount} souls",
+	"popup_fragment": "+1 fragment",
+	"popup_fragments": "+{amount} fragments",
+	"clipboard_title": "Onboarding Checklist",
+	"clipboard_log": "Recent Correspondence",
+	"clipboard_close": "{key} to close",
+
+	# ------------------------------------------------------------ the hidden-start objectives
+	"intro_place_heart": "Good evening, Master, and welcome aboard! First item on the agenda: dig in and place your Necrotic Heart somewhere cosy and underground.",
+	"obj_place_heart": "Place your Necrotic Heart underground",
+	"done_place_heart": "The Heart is in! Beating, glowing, and entirely ours. Every great enterprise starts with a single organ.",
+	"milestone_place_heart": "Headquarters Established",
+
+	"intro_refill_mana": "Your mana is measured in souls, Master. Spend a little, then step up to the Heart and draw on the souls stored there.",
+	"obj_refill_mana": "Refill your mana at the Heart",
+	"done_refill_mana": "Topped up! One soul, fully reinvested. That's what I call liquidity.",
+	"milestone_refill_mana": "Liquidity Achieved",
+
+	"intro_dig_chamber": "Next, office space! Carve out a chamber around the Heart with your Dig spell. Open plan, very modern, no windows.",
+	"obj_dig_chamber": "Dig out your first chamber",
+	"done_dig_chamber": "Look at all that floor space! I'll put in a request for a water cooler. Or a blood cooler.",
+	"milestone_dig_chamber": "Office Space Acquired",
+
+	"intro_rob_grave": "Time for talent acquisition! The town cemetery is full of candidates with excellent references. Draw one up through the earth with Harvest.",
+	"obj_rob_grave": "Rob a grave in the town cemetery",
+	"done_rob_grave": "Welcome aboard! He was resting, but he showed real potential.",
+	"milestone_rob_grave": "First Hire",
+
+	"intro_build_grinder": "Our recruit needs onboarding. Build a Corpse Grinder in the lair. It turns one large employee into many small, useful ones.",
+	"obj_build_grinder": "Build a Corpse Grinder",
+	"done_build_grinder": "The Grinder is installed! Please keep hands, feet and Eyegors clear of the intake.",
+	"milestone_build_grinder": "Heavy Industry",
+
+	"intro_grind_corpse": "Drop a body into the Grinder's hopper. Think of it as restructuring.",
+	"obj_grind_corpse": "Grind a corpse",
+	"done_grind_corpse": "Restructuring complete! Gibs and bones, all sorted. Nothing goes to waste here. Except, technically, everyone.",
+	"milestone_grind_corpse": "Restructuring Complete",
+
+	"intro_build_stitching_table": "Now we need assembly. Build a Stitching Table, where parts become personnel.",
+	"obj_build_stitching_table": "Build a Stitching Table",
+	"done_build_stitching_table": "Stitching Table ready! Needles threaded, thread also threaded. I'm told that's how it works.",
+	"milestone_build_stitching_table": "Assembly Line",
+
+	"intro_stitch_body": "Bring gibs and bones to the Stitching Table and it will stitch a whole body. It doesn't have to match. Diversity is a strength!",
+	"obj_stitch_body": "Stitch together a body",
+	"done_stitch_body": "A complete body! Two arms, two legs, one head. I checked twice. Well, once. I only have the one eye.",
+	"milestone_stitch_body": "Some Assembly Required",
+
+	"intro_build_altar": "The body is ready. It just lacks motivation. Build a Reanimation Altar.",
+	"obj_build_altar": "Build a Reanimation Altar",
+	"done_build_altar": "The Altar is up! It smells faintly of ozone and regret. Lovely.",
+	"milestone_build_altar": "Motivation Department",
+
+	"intro_raise_ghoul": "Lay the body on the Altar, then lay hands on it. It costs one soul from the Heart. Very competitive salary!",
+	"obj_raise_ghoul": "Raise your first ghoul",
+	"done_raise_ghoul": "It lives! Well, it ghouls. Please welcome our newest team member, who works tirelessly because it physically cannot tire.",
+	"milestone_raise_ghoul": "Our First Employee",
+
+	"intro_mark_dig": "A good manager delegates. Mark ground with the Dig command and your ghouls will clear it. You point; they dig.",
+	"obj_mark_dig": "Mark ground for your ghouls to dig",
+	"done_mark_dig": "Delegation! I'm writing 'natural leader' on your review right now.",
+	"milestone_mark_dig": "Middle Management",
+
+	"intro_harvest_fragments": "Souls don't grow on trees, Master. They grow in rabbits. Go to the forest and harvest soul fragments from a critter. Five make a whole soul.",
+	"obj_harvest_fragments": "Harvest soul fragments from a critter",
+	"done_harvest_fragments": "A fragment! Small, but it adds up. Every rabbit is a micro-investment.",
+	"milestone_harvest_fragments": "Diversified Portfolio",
+
+	"intro_survive_patrol": "Heads up, Master: a patrol of community stakeholders is on its way. Stay out of sight, or make sure nobody reports back.",
+	"obj_survive_patrol": "Survive the first farmer patrol",
+	"done_survive_patrol": "The patrol has gone home. Most of it.",
+	"milestone_survive_patrol": "Community Relations",
+
+	"all_done": "That's the whole onboarding checklist, Master! Your performance review is glowing. Literally; I spilled ectoplasm on it.",
+
+	# ------------------------------------------------------------ running commentary
+	"first_soul": "A soul for the Heart! Deposited, logged, and filed under Assets.",
+	"soul_banked": [
+		"Another soul banked!",
+		"Soul received. The Heart thanks you for your business.",
+		"Deposit confirmed. Our reserves grow!",
+	],
+	"mana_low": "Mana's running low, Master. Pop back to the Heart for a top-up.",
+	"night_started": "Night falls. Fewer witnesses. More opportunities.",
+	"day_started": "The sun is up. Do keep the screaming indoors until dusk.",
+	"suspicion_25": "The village is showing some interest in our brand, Master. Wonderful for awareness. Less wonderful for us.",
+	"suspicion_50": "The villagers are talking, Master. Mostly about pitchforks. Lie low for a while.",
+	"suspicion_75": "Suspicion is very high. I can see torches. Lovely craftsmanship. Stay underground.",
+	"hunger_25": "Our partners downstairs have noticed our soul collection. They've sent a very warm greeting. Literally warm.",
+	"hunger_50": "Something deep below is taking an interest in our numbers. I've listed it on the clipboard as a stakeholder.",
+	"hunger_75": "Something is scratching under the floor, Master. It's the plumbing. We don't have plumbing.",
+	"sighting": "Someone saw something they shouldn't have, Master. Perhaps they'd like to join the company?",
+	"human_killed_witnessed": "A soul, collected in person. That's the personal touch our customers deserve.",
+	"human_killed_unwitnessed": "A death without you there, Master, so the soul slipped away. Someone has to be present to sign for the delivery!",
+	"heart_destroyed": "The Heart has been destroyed. That's a setback. Find a new site, Master, and we'll call it a restructure.",
+	"minion_raised": [
+		"Another hire! The team grows.",
+		"New starter on the floor! I've given it a name badge. It ate the name badge.",
+		"Welcome to the team! Benefits include not being dead. Mostly.",
+	],
+
+	# ------------------------------------------------------------ announcements (mood &"announce")
+	# The Dungeon Keeper register: 2-6 words, flat, a full stop. Frequent, so never jokes that tire.
+	"ann_heart_placed": "The Heart is beating.",
+	"ann_mana_low": "Your mana is low.",
+	"ann_mana_empty": "Your mana is spent.",
+	"ann_soul_banked": "A soul has been banked.",
+	"ann_soul_lost": "A soul has slipped away.",
+	"ann_fragments_combined": "Fragments have become a soul.",
+	"ann_grave_robbed": "A grave has been emptied.",
+	"ann_machine_built": "{name} constructed.",
+	"ann_new_room": "A new chamber is available.",
+	"ann_new_spell": "A new spell is available.",
+	"ann_ghoul_raised": "A ghoul has risen.",
+	"ann_ghoul_hungry": "A ghoul is hungry.",
+	"ann_ghoul_tired": "Your ghouls are tired.",
+	"ann_ghouls_angry": "Your ghouls are unhappy.",
+	"ann_ghoul_lost": "A ghoul has fallen. Again.",
+	"ann_grinder_idle": "The grinder is idle.",
+	"ann_suspicion_rising": "Suspicion is rising.",
+	"ann_suspicion_falling": "The village is calming down.",
+	"ann_hunger_rising": "Something below is hungry.",
+	"ann_patrol_coming": "A patrol approaches.",
+	"ann_patrol_gone": "The patrol has left.",
+	"ann_seen": "You have been seen.",
+	"ann_heart_attacked": "The Heart is under attack.",
+	"ann_dawn": "Dawn is coming.",
+	"ann_dusk": "Night has fallen.",
+
+	# ------------------------------------------------------------ tips (Mentor-style: a cruel, useful fact, stated plainly)
+	"tips": [
+		"Souls only reach the Heart if you are there to sign for them. Be present at the end.",
+		"Ghouls work harder when fed. They also stop eating each other.",
+		"Farmers investigate noise. The grinder is noise.",
+		"Five fragments make a soul. Rabbits are fragments with ears.",
+		"Graves refill when the village buries someone. The village is very cooperative.",
+		"A patrol that never reports back raises no alarm. Only questions.",
+	],
+
+	# ------------------------------------------------------------ HR memos (Lair sends these with mood &"memo")
+	"memo_rest": "RE: Rest\nThe ghouls have asked, politely, for somewhere to lie down that isn't the floor. Coffin bunks would do wonders for morale.",
+	"memo_food": "RE: Rations\nSeveral ghouls report they are hungry. One reports he is eating his colleague. Please arrange meat before this becomes policy.",
+	"memo_overtime": "RE: Hours\nA reminder that ghouls are owed rest. I have received a complaint written in what I hope was ink.",
+	"memo_seating": "RE: Seating\nThe ghouls have asked for somewhere to sit that isn't another ghoul. I have noted it on the clipboard.",
+	"memo_slowdown": "RE: Productivity\nOutput is down. The ghouls say they are 'working to rule'. I didn't know we had rules. Apparently we do now.",
+	"memo_strike": "RE: Industrial Action\nThe ghouls are on strike. There are picket signs. One is spelled correctly. Please see to their needs, Master.",
+
+	# ------------------------------------------------------------ items (describe_item)
+	"item_corpse": [
+		"Corpse, Pre-Owned. One careful owner.",
+		"Body, Gently Deceased. Sold as seen. No returns.",
+	],
+	"item_part": "Part, Assorted. Fits somewhere. Probably.",
+	"item_part_arm": "{side}Arm, Slightly Used. Previous owner no longer requires it.",
+	"item_part_leg": "{side}Leg, Low Mileage. Walked mostly on Sundays.",
+	"item_part_head": "Head, Vacant. Ideal for a role that requires no thinking.",
+	"item_part_torso": "Torso, Load-Bearing. The middle of everything.",
+	"item_gibs": "Gibs, Bulk. Sold by the bucket. Ask about our loyalty scheme.",
+	"item_bones": "Bones, Structural. The original frame, minus the furnishings.",
+	"item_stitched_body": "Body, Assembled. Some assembly was required. Some remains optional.",
+	"item_meat": "Meat, Unspecified. Don't ask. The ghouls didn't.",
+	"item_metal": "Metal, Scrap. Formerly a plough, a pot, or a very unlucky knight.",
+	"item_wood": "Wood, Seasoned. Formerly a tree, a door, or a coffin. We recycle.",
+	"item_stone": "Stone, Unremarkable. Great for walls. Poor conversationalist.",
+	"item_soul_orb": "Soul, Loose. Please return it to the Heart at your earliest convenience.",
+	"item_unknown": "{name}, Condition Unknown. It's ours now, whatever it is.",
+
+	# ------------------------------------------------------------ buildings and interact hints (for Lair)
+	"build_heart": "Necrotic Heart",
+	"build_grinder": "Corpse Grinder",
+	"build_stitching_table": "Stitching Table",
+	"build_altar": "Reanimation Altar",
+	"build_spike_trap": "Spike Trap",
+	"desc_heart": "The beating centre of the company. Stores souls; draws attention from above and below.",
+	"desc_grinder": "Turns a body into parts, gibs and bones. Mind the intake.",
+	"desc_stitching_table": "Where parts become personnel.",
+	"desc_altar": "Spend a soul; gain an employee.",
+	"desc_spike_trap": "A warm welcome for uninvited guests.",
+	"hint_refill": "Refill mana",
+	"hint_grind": "Load grinder",
+	"hint_stitch": "Stitch body",
+	"hint_raise": "Raise ghoul",
+	"hint_pick_up": "Pick up",
+
+	# ------------------------------------------------------------ spells (for the Necromancer)
+	"spell_dig": "Dig",
+	"spell_harvest": "Harvest",
+	"spell_siphon": "Siphon",
+	"spell_build": "Build",
+	"spell_command_dig": "Dig Order",
+	"spell_stockpile": "Stockpile",
+	"spell_raise": "Raise",
+
+	# ------------------------------------------------------------ the Lair's lines (LairText keys; Lair keeps its own defaults)
+	"heart_refill": "Withdrawal approved: {souls} souls' worth of mana.",
+	"heart_refill_empty": "The Heart is empty, Master. Nothing to withdraw.",
+	"heart_refill_full": "Your mana is already full, Master. Spend some first.",
+	"hint_heart": "Necrotic Heart ({souls} souls): refill mana",
+	"hint_altar_raise": "Reanimation Altar: raise a {minion}",
+	"hint_altar_empty": "Reanimation Altar (empty): switch to {minion}",
+	"hint_machine": "{name}: {status}",
+	"hint_striker": "Striking ghoul: pay a motivational visit",
+	"status_working": "working",
+	"status_waiting": "waiting for {needs}",
+	"status_ready": "ready, needs an operator",
+	"altar_mode": "Noted. The Altar will raise a {minion} next.",
+	"altar_no_soul": "The Heart has no soul to spare, Master. Every hire costs one.",
+	"altar_no_mana": "Not enough mana to lay hands on it, Master.",
+	"altar_raised": "It twitches. It stands. Another {minion} joins the payroll.",
+	"stockpile_refused": "Raw parts can't go in a stockpile, Master. Grind them first. Regulations.",
+	"stockpile_made": "A new {kind} stockpile. The ghouls will keep it tidy. Ish.",
+	"stockpile_gibs": "Flesh pit",
+	"stockpile_bones": "Ossuary",
+	"stockpile_corpses": "Corpse pile",
+	"dig_needs_tools": "The ghouls can't dig stone bare-handed, Master. They'll need metal tools.",
+	"minion_soul_lost": "One of ours fell beyond the Heart's reach. Its soul is loose out there. Do fetch it.",
+	"memo_complaint": "RE: Grievances\nThe ghouls have raised concerns about {need}. I have filed them under 'later'.",
+	"memo_strike_over": "RE: Industrial Action, Resolved\nThe strike is over. The ghouls are back at work. Grudgingly.",
+	"memo_motivated": "RE: Morale\nMorale has improved since your visit. Nobody is to discuss the visit.",
+	"need_food": "food",
+	"need_rest": "rest",
+
+	# ------------------------------------------------------------ the Necromancer's lines (NecroText keys)
+	"necro_no_mana": "Your mana is spent, Master. The Heart will top you up.",
+	"necro_stockpile_needs_hollow": "Dig the hollow out first, Master. Then we paint the lines.",
+	"necro_cost_per_s": "{c} souls/s",
+	"necro_cost_mana": "{c} mana",
+	"necro_cost_souls": "{c} souls",
+	"necro_siphon_cost": "gains mana",
+	"necro_command_cost": "order",
+	"necro_free": "free",
+	"necro_build_nothing": "Nothing to build",
+	"necro_build_too_far": "too far",
+	"necro_build_no_builder": "no lair yet",
+	"necro_build_blocked": "won't fit here",
+	"necro_build_need_mana": "not enough mana",
+	"necro_build_need_souls": "not enough souls",
+	"hint_refill_hint": "Refill mana ({s} souls stored)",
+
+	# ------------------------------------------------------------ Suspicion and Patrols (Threats signals; commentary.gd)
+	"patrol_left": "A patrol has left {town}, Master. Farmers. Pitchforks. The usual delegation.",
+	"raid_started": "They've found us, Master. A raid. Do greet them warmly; I'll fetch the clipboard.",
+	"alarm_raised": "Someone is shouting about us in town. Bad for business.",
+	"depth_tier": "We've gone deeper, Master. Something down here has noticed. Hunger will rise faster.",
+}
