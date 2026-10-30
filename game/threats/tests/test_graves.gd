@@ -24,6 +24,7 @@ func run(t) -> void:
 	world.fill_rect(195, 68, 10, 3, SandWorld.M_WOOD)
 	Threats.begin_run({"surface_y_px": 120.0, "towns": [town], "graves": [grave_a, grave_b],
 		"graveyard": Rect2(280, 100, 160, 40)})
+	Threats.end_grace() # these checks are about what happens after the grace period
 
 	# a body in the ground, then Harvest's first touch takes it out of the group (coffin wood untouched)
 	var body := Node2D.new()

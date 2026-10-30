@@ -27,6 +27,7 @@ func run(t) -> void:
 	var info: Dictionary = load("res://world/install.gd").new().install(fake, {})
 	info.merge(load("res://flesh/install.gd").new().install(fake, info), true)
 	load("res://threats/install.gd").new().install(fake, info)
+	Threats.end_grace() # these checks are about what happens after the grace period
 	Threats.auto_tick = false
 	var patrols: Node = Threats.patrols
 	t.check(patrols != null, "installer added the patrols")

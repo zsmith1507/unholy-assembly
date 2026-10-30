@@ -5,8 +5,16 @@ extends Node
 ## Suspicion (forces from above) rises with: the heart's presence, noise, light leaking out at night,
 ## smoke venting to the surface, the stench of death, missing residents, robbed graves, sightings that
 ## reach town, attacks on towns, and towns that shrink too fast. It slowly decays while you stay quiet.
-## Hunger (forces from below) rises with: the heart's presence, collecting human souls, burning souls,
-## and digging deep. Nothing comes up from below yet; the meter moves and the thresholds are exposed.
+## Hunger (forces from below) sleeps until the lair goes deep (HUNGER.start_depth_cells). Once it has woken,
+## it rises with each depth tier passed, collecting human souls and burning souls. The heart's mere presence
+## and shallow digging never feed it. Nothing comes up from below yet; the meter moves and the thresholds
+## are exposed.
+##
+## A grace period (GRACE) at the start of a run: neither meter rises for the first few minutes.
+##
+## Houses have separate interiors (World's homes[*].interior). Anything inside one counts as being at that
+## house's front door for noise, deaths and towns; a sighting only counts when the witness and what they saw
+## are in the same space (both outside, or in the same interior); a witness runs home through their door.
 ##
 ## Every number Zach may want to change is in the const blocks below. The F3 overlay (debug_overlay.gd)
 ## shows each change and why, from `ledger`.
@@ -27,6 +35,8 @@ signal hunger_level_crossed(level: float) ## 25, 50, 75 on the way up
 signal suspicion_level_crossed(level: float)
 signal raid_started(at: Vector2)
 signal grave_found(at: Vector2) ## a robbed grave was noticed; patrols start watching the graveyard
+signal grace_ended ## the grace period is over; the meters can rise from now on
+signal hunger_woke(depth_cells: float) ## something went deep enough that Hunger starts to build
 
 # ================================================================ tuning (Zach: change numbers here)
 
@@ -112,8 +122,10 @@ const WITNESS := {
 	"necromancer_mult": 1.5, # seeing the master himself is worse than seeing a ghoul
 	"tunnel_mult": 0.6, # a suspicious hole is less alarming than a walking corpse
 	"home_margin_px": 16.0, # within a town rect (grown by this) counts as home
-	"timeout_s": 45.0, # a witness who never gets home spreads the word anyway after this long
+	"timeout_s": 45.0, # a witness who never gets home spreads the word anyway after this long...
+	"timeout_per_px": 0.016, # ...or longer when home is far: this many seconds per pixel to their town (at a run)
 	"repeat_s": 20.0, # the same witness seeing the same thing again within this is ignored
+	"door_px": 14.0, # a witness this close to their own front door goes in (and is home)
 }
 
 ## Moving house: a new heart placed far from the old one starts with less Suspicion.
@@ -131,24 +143,38 @@ const CULL := {
 	"default_population": 12, # if World hasn't told us how many people live there
 }
 
-## Hunger (forces from below).
+## Hunger (forces from below). It sleeps until something of yours goes deep: the necromancer, a minion, or
+## the Dig spell biting below `start_depth_cells` under the natural surface. One cell is 2 px, and the
+## necromancer is about 25 cells tall. The opening lair hall is dug about 95 cells down and the clay gives
+## way to stone at about 140, so 150 means "well below a normal lair, into the stone". Once woken it stays
+## awake for the rest of the run, even if you climb back up.
 const HUNGER := {
-	"heart_per_min": 0.15,
+	"start_depth_cells": 150,
+	"souls_need_depth": true, # human souls and burned souls only feed Hunger once it has woken
 	"per_human_soul": 1.5,
 	"soul_weights": {"fragments": 0.0, "rabbit": 0.0, "crow": 0.0, "deer": 0.0, "critter": 0.0, "minion": 0.25},
 	"burn_per_soul": 0.3, # spending souls from the heart (mana refills, raising)
 	"depth_every_s": 1.0,
-	"depth_tiers": [ # cells below the surface; crossing one wakes something (once) and keeps it humming
-		{"cells": 80, "name": "the deep soil", "once": 3.0, "per_min": 0.1},
-		{"cells": 180, "name": "the old stone", "once": 6.0, "per_min": 0.25},
-		{"cells": 320, "name": "the black below", "once": 12.0, "per_min": 0.5},
+	"depth_tiers": [ # cells below the surface; crossing one wakes something (once) and keeps it humming.
+		# A tier shallower than start_depth_cells only counts once Hunger has woken.
+		{"cells": 150, "name": "the old stone", "once": 3.0, "per_min": 0.1},
+		{"cells": 240, "name": "the deep stone", "once": 6.0, "per_min": 0.25},
+		{"cells": 340, "name": "the black below", "once": 12.0, "per_min": 0.5},
 	],
 	"levels": [25.0, 50.0, 75.0],
 }
 
+## A grace period at the start of each run: neither meter rises for this long. Counted in play time, so the
+## title screen and the pause menu don't use it up. Meters may still fall. A timer reads better than "until
+## the first heart" because the first heart is free and usually goes down in the first minute or two.
+const GRACE := {
+	"seconds": 300.0, # five minutes of play
+	"still_counts": [], # ledger keys that count even during grace, e.g. ["missing", "attack"] for murders
+}
+
 ## Patrol sizing and timing (patrols.gd reads these).
 const PATROL := {
-	"first_after_s": 60.0, # the first patrol leaves town this long into the run
+	"first_after_s": 60.0, # the first patrol leaves town this long after the grace period ends
 	"interval_s": 240.0, # time between patrols from one town at 0 Suspicion
 	"interval_min_s": 75.0, # ...and at 100 Suspicion
 	"night_interval_mult": 2.5, # night patrols are rarer
@@ -157,8 +183,10 @@ const PATROL := {
 	"size_max": 6,
 	"max_out": 4, # patrols out at once, all towns together
 	"kind": &"farmer",
-	"duration_s": 150.0, # then they head home
-	"home_timeout_s": 90.0, # members still out this long after heading home are removed
+	"duration_s": 150.0, # then they head home (longer when the route is long: see walk_px_per_s)
+	"home_timeout_s": 90.0, # members still out this long after heading home are removed (longer when far)
+	"walk_px_per_s": 40.0, # a farmer's walking pace, to fit long routes in a bigger world
+	"route_walks": 2.0, # a patrol stays out long enough to walk its route this many times (out and back)
 	"wander_px": 700.0, # length of a made-up route when World gave us none
 	"hear_px": 260.0, # a patrol member hears a noise of audible 1.0 this far away
 	"investigate_min": 0.2, # quieter than this at the surface and patrols ignore it
@@ -188,6 +216,8 @@ var ledger: Array = [] ## newest last: {key, meter, delta, text, t, count}
 var pending_reports: Array = [] ## {witness, what, at, t, amount}
 var depth_tier := -1 ## index into HUNGER.depth_tiers, -1 = none yet
 var max_depth_cells := 0.0
+var hunger_woken := false ## true once anything went below HUNGER.start_depth_cells this run
+var grace_held := {"suspicion": 0.0, "hunger": 0.0} ## what the grace period held off, for the overlay
 var patrols: Node = null ## patrols.gd registers itself here
 var time := 0.0 ## seconds since begin_run (game time)
 var auto_tick := true ## tests turn this off and drive time with simulate()
@@ -210,6 +240,9 @@ var _baseline := PackedInt32Array() ## natural surface per column, cells
 var _deaths := {} ## town index -> Array of death times
 var _report_seen := {} ## "witness:of" -> time
 var _last_souls := 0.0
+var _grace_over := false
+var _grace_s: float = GRACE.seconds ## length of this run's grace period (end_grace() cuts it short)
+var _interiors: Array = [] ## {rect, door (outside), door_inside, home_id, town} from World's homes
 
 
 func _ready() -> void:
@@ -219,7 +252,8 @@ func _ready() -> void:
 	Events.actor_died.connect(_on_actor_died)
 	Events.soul_collected.connect(_on_soul_collected)
 	Events.souls_changed.connect(_on_souls_changed)
-	Events.dig_marked.connect(_on_dig_marked)
+	Events.entered_building.connect(_on_entered_building)
+	Events.left_building.connect(_on_left_building)
 	Events.suspicion_changed.connect(_on_suspicion_changed)
 	Events.hunger_changed.connect(_on_hunger_changed)
 	Events.heart_destroyed.connect(_on_heart_destroyed)
@@ -231,6 +265,7 @@ func begin_run(run_info: Dictionary = {}) -> void:
 	reset()
 	info = run_info
 	_snapshot_baseline()
+	_gather_interiors()
 
 
 func reset() -> void:
@@ -239,6 +274,11 @@ func reset() -> void:
 	pending_reports.clear()
 	depth_tier = -1
 	max_depth_cells = 0.0
+	hunger_woken = false
+	grace_held = {"suspicion": 0.0, "hunger": 0.0}
+	_grace_over = false
+	_grace_s = GRACE.seconds
+	_interiors.clear()
 	time = 0.0
 	_last_gain_t = -1000.0
 	_timers.clear()
@@ -273,6 +313,10 @@ func simulate(seconds: float, step: float = 0.25) -> void:
 
 func _tick(dt: float) -> void:
 	time += dt
+	if not _grace_over and grace_left() <= 0.0:
+		_grace_over = true
+		note("grace", "the grace period is over: Suspicion and Hunger can rise now")
+		grace_ended.emit()
 	if _every("second", 1.0):
 		_per_second()
 	if _every("light", LIGHT.every_s):
@@ -301,7 +345,6 @@ func _every(key: String, period: float) -> bool:
 func _per_second() -> void:
 	if GameState.has_heart:
 		add_suspicion(SUSPICION.heart_per_min / 60.0, "heart", "the heart's presence", false)
-		add_hunger(HUNGER.heart_per_min / 60.0, "heart", "the heart's presence")
 	# fading while quiet
 	var floor_v: float = SUSPICION.decay_floor_with_heart if GameState.has_heart else SUSPICION.decay_floor_no_heart
 	if is_quiet() and GameState.suspicion > floor_v:
@@ -314,6 +357,25 @@ func _per_second() -> void:
 
 
 # ================================================================ public API
+
+## Seconds of the grace period left (0 once it is over). Eyegor can show this.
+func grace_left() -> float:
+	return maxf(0.0, _grace_s - time)
+
+
+## End the grace period now (tests, or a later "skip the tutorial" option).
+func end_grace() -> void:
+	_grace_s = minf(_grace_s, time)
+
+
+func in_grace() -> bool:
+	return grace_left() > 0.0
+
+
+## Where Hunger stands: {awake, deepest_cells, start_cells}. Eyegor can show "Hunger sleeps until ...".
+func hunger_status() -> Dictionary:
+	return {"awake": hunger_woken, "deepest_cells": max_depth_cells, "start_cells": float(HUNGER.start_depth_cells)}
+
 
 ## True when nothing suspicious has happened for SUSPICION.quiet_after_s.
 func is_quiet() -> bool:
@@ -328,6 +390,8 @@ func seconds_until_quiet() -> float:
 func add_suspicion(delta: float, key: String, why: String, counts_as_activity: bool = true) -> void:
 	if absf(delta) < 0.000001:
 		return
+	if delta > 0.0 and _grace_blocks("suspicion", key, delta):
+		return
 	GameState.add_suspicion(delta, key)
 	if delta > 0.0 and counts_as_activity:
 		_last_gain_t = time
@@ -337,8 +401,23 @@ func add_suspicion(delta: float, key: String, why: String, counts_as_activity: b
 func add_hunger(delta: float, key: String, why: String) -> void:
 	if absf(delta) < 0.000001:
 		return
+	if delta > 0.0 and _grace_blocks("hunger", key, delta):
+		return
 	GameState.add_hunger(delta, key)
 	_log("hunger", key, delta, why)
+
+
+## During the grace period a gain is held off (and tallied for the overlay) instead of applied.
+func _grace_blocks(meter: String, key: String, delta: float) -> bool:
+	if not in_grace():
+		return false
+	var k := key.get_slice(":", 0)
+	if GRACE.still_counts.has(k) or GRACE.still_counts.has(key):
+		return false
+	grace_held[meter] = float(grace_held[meter]) + delta
+	_log("note", "grace", 0.0, "grace period (%d s left): held off %+.2f Suspicion, %+.2f Hunger" % [
+		ceili(grace_left()), grace_held.suspicion, grace_held.hunger])
+	return true
 
 
 ## A note in the ledger with no change to either meter.
@@ -444,7 +523,8 @@ func noise_muffle(weight: float) -> float:
 
 
 ## What a noise would cost, without applying it. {amount, audible, earth, near, surface_point}
-func noise_cost(at: Vector2, loudness: float) -> Dictionary:
+func noise_cost(at_in: Vector2, loudness: float) -> Dictionary:
+	var at := outside_point(at_in)
 	var earth := earth_above(at)
 	var muffle := noise_muffle(earth.weight)
 	var surface_point := Vector2(at.x, minf(at.y, surface_at(at.x)))
@@ -472,8 +552,22 @@ func start_report(witness: Node2D, what: String, at: Vector2, weight: float = 1.
 		if r.witness == witness:
 			r.amount = maxf(r.amount, amount)
 			return
-	pending_reports.append({"witness": witness, "what": what, "at": at, "t": time, "amount": amount})
+	var wp := witness.global_position
+	var home := _home_of(witness)
+	var door: Vector2 = home.get("door", Vector2.INF)
+	# far from home in a bigger world: give them time to get there
+	var goal: Vector2 = door if door != Vector2.INF else _nearest_town_point(outside_point(wp))
+	var timeout: float = WITNESS.timeout_s
+	if goal != Vector2.INF:
+		timeout = maxf(timeout, outside_point(wp).distance_to(goal) * float(WITNESS.timeout_per_px))
+	pending_reports.append({"witness": witness, "what": what, "at": outside_point(at), "t": time, "amount": amount,
+		"inside": interior_at(wp), "entered": false, "door": door, "timeout": timeout})
 	note("report", "%s saw %s and is heading home to tell (+%.1f if they make it)" % [_who(witness), what, amount])
+	# a resident outside runs for their own front door (patrols run their own members)
+	if door != Vector2.INF and interior_at(wp) < 0 and not _on_patrol(witness):
+		if witness.has_method("set_route") and witness.has_method("set_mode"):
+			witness.call("set_route", PackedVector2Array([door]))
+			witness.call("set_mode", &"flee")
 
 
 ## Index of the town whose rect (grown by margin) contains the point, or -1.
@@ -499,6 +593,8 @@ func suspicion_per_min() -> float:
 func _on_noise(at: Vector2, loudness: float, source: String) -> void:
 	if loudness <= 0.0:
 		return
+	if source == "dig":
+		_note_depth(at) # the Dig spell biting into the ground down there
 	var c := noise_cost(at, loudness)
 	var earth: Dictionary = c.earth
 	if c.audible > 0.0:
@@ -517,7 +613,7 @@ func _listener_near(p: Vector2) -> bool:
 		return true
 	for h in get_tree().get_nodes_in_group("humans"):
 		if h is Node2D and is_instance_valid(h) and not _is_dead(h):
-			if (h as Node2D).global_position.distance_to(p) <= r:
+			if outside_point((h as Node2D).global_position).distance_to(p) <= r:
 				return true
 	return false
 
@@ -600,7 +696,7 @@ func sky_exposure(p: Vector2) -> float:
 
 ## Underground (below the natural surface), or within the heart's range. Towns' own lights don't count.
 func _counts_as_lair(p: Vector2) -> bool:
-	if town_near(p, 0.0) >= 0:
+	if interior_at(p) >= 0 or town_near(p, 0.0) >= 0:
 		return false
 	if GameState.in_heart_range(p):
 		return true
@@ -686,7 +782,7 @@ func _scan_stench() -> void:
 	for src in out:
 		if src.strength < STENCH.min_strength:
 			continue
-		var earth := earth_above(src.pos)
+		var earth := earth_above(outside_point(src.pos))
 		src["surface_strength"] = src.strength * pow(0.5, float(earth.weight) / STENCH.half_cells)
 		src["earth_cells"] = earth.cells
 		total += src.surface_strength
@@ -725,7 +821,8 @@ func _lair_tiles(size: int) -> Array:
 
 # ================================================================ bodies, graves, towns
 
-func _on_actor_died(actor: Node2D, killer: Node2D, at: Vector2) -> void:
+func _on_actor_died(actor: Node2D, killer: Node2D, at_in: Vector2) -> void:
+	var at := outside_point(at_in)
 	# a witness silenced before getting home
 	for r in pending_reports.duplicate():
 		if r.witness == actor:
@@ -897,6 +994,9 @@ func _grave_count(p: Vector2) -> int:
 func _on_sighting(witness: Node2D, of: Node2D) -> void:
 	if witness == null or not is_instance_valid(witness) or _is_dead(witness):
 		return
+	# walls between them: someone indoors can't see the street, and the street can't see indoors
+	if of != null and is_instance_valid(of) and interior_at(witness.global_position) != interior_at(of.global_position):
+		return
 	var key := "%d:%d" % [witness.get_instance_id(), of.get_instance_id() if of != null else 0]
 	if _report_seen.has(key) and time - float(_report_seen[key]) < WITNESS.repeat_s:
 		return
@@ -913,7 +1013,7 @@ func _on_sighting(witness: Node2D, of: Node2D) -> void:
 			what = "a walking corpse"
 	var at := of.global_position if of != null and is_instance_valid(of) else witness.global_position
 	start_report(witness, what, at, weight)
-	sighting_logged.emit(at, witness)
+	sighting_logged.emit(outside_point(at), witness)
 
 
 func _check_reports() -> void:
@@ -924,8 +1024,8 @@ func _check_reports() -> void:
 			note("report", "a witness to %s never made it home (report stopped)" % r.what)
 			report_stopped.emit(r.what)
 			continue
-		var home := town_near((wv as Node2D).global_position, WITNESS.home_margin_px) >= 0
-		var timed_out: bool = time - float(r.t) >= WITNESS.timeout_s
+		var home := _report_home(r, wv as Node2D)
+		var timed_out: bool = time - float(r.t) >= float(r.get("timeout", WITNESS.timeout_s))
 		if home or timed_out:
 			pending_reports.erase(r)
 			var how := "got home and told everyone about %s" % r.what if home else "spread word of %s" % r.what
@@ -936,6 +1036,8 @@ func _check_reports() -> void:
 # ================================================================ hunger
 
 func _on_soul_collected(amount: float, source: String, _at: Vector2) -> void:
+	if HUNGER.souls_need_depth and not hunger_woken:
+		return # nothing below has noticed the lair yet
 	var weights: Dictionary = HUNGER.soul_weights
 	var wgt: float = float(weights.get(source, 1.0))
 	if wgt <= 0.0:
@@ -949,12 +1051,10 @@ func _on_soul_collected(amount: float, source: String, _at: Vector2) -> void:
 func _on_souls_changed(souls: float) -> void:
 	var d := souls - _last_souls
 	_last_souls = souls
+	if HUNGER.souls_need_depth and not hunger_woken:
+		return
 	if d < -0.0001:
 		add_hunger(-d * HUNGER.burn_per_soul, "burn", "burned %.2f soul%s" % [-d, "" if is_equal_approx(-d, 1.0) else "s"])
-
-
-func _on_dig_marked(cells: Rect2i) -> void:
-	_note_depth(Sim.to_pixel(Vector2i(cells.position.x + cells.size.x / 2, cells.end.y)))
 
 
 func _scan_depth() -> void:
@@ -965,10 +1065,18 @@ func _scan_depth() -> void:
 
 
 func _note_depth(p: Vector2) -> void:
+	if interior_at(p) >= 0:
+		return # a house interior is not underground, wherever World keeps it
 	var d := (p.y - surface_at(p.x)) / Sim.CELL
 	if d <= max_depth_cells:
 		return
 	max_depth_cells = d
+	if not hunger_woken:
+		if d < float(HUNGER.start_depth_cells):
+			return
+		hunger_woken = true
+		note("depth", "something below has noticed: %d cells down, Hunger starts to build" % roundi(d))
+		hunger_woke.emit(d)
 	var tiers: Array = HUNGER.depth_tiers
 	while depth_tier + 1 < tiers.size() and d >= float(tiers[depth_tier + 1].cells):
 		depth_tier += 1
@@ -1003,6 +1111,116 @@ func _on_hunger_changed(value: float, delta: float, _reason: String) -> void:
 	for lv in HUNGER.levels:
 		if value >= lv and value - delta < lv:
 			hunger_level_crossed.emit(lv)
+
+
+# ================================================================ houses and their interiors
+
+## Index of the house interior containing this point, or -1 when it is outside (or World has no interiors).
+func interior_at(p: Vector2) -> int:
+	for i in _interiors.size():
+		if (_interiors[i].rect as Rect2).has_point(p):
+			return i
+	return -1
+
+
+## Where a point counts as being for the outside world: inside a house is at that house's front door.
+func outside_point(p: Vector2) -> Vector2:
+	var i := interior_at(p)
+	return p if i < 0 else (_interiors[i].door as Vector2)
+
+
+## The interiors World described: [{rect, door, door_inside, home_id, town}] (pixels).
+func interiors() -> Array:
+	return _interiors
+
+
+func _gather_interiors() -> void:
+	_interiors.clear()
+	var towns: Array = info.get("towns", [])
+	for ti in towns.size():
+		for h in towns[ti].get("homes", []):
+			var r = h.get("interior")
+			if not (r is Rect2) or not (r as Rect2).has_area():
+				continue
+			var hr: Rect2 = h.get("rect", Rect2())
+			var door: Vector2 = h.get("door", Vector2(hr.get_center().x, hr.end.y))
+			_interiors.append({"rect": r, "door": door, "door_inside": h.get("door_inside", (r as Rect2).get_center()),
+				"home_id": int(h.get("id", -1)), "town": ti})
+
+
+## The home a human lives in (World's home dictionary with its outside `door`), or {}.
+func _home_of(actor: Node) -> Dictionary:
+	var hid = actor.get("home_id")
+	if hid == null or int(hid) < 0:
+		return {}
+	for t in info.get("towns", []):
+		for h in t.get("homes", []):
+			if int(h.get("id", -1)) == int(hid):
+				return h
+	return {}
+
+
+## Has a running witness got home? Into a house (through a door, not the one they saw it in),
+## or into a town out in the open. One at their own front door is let in.
+func _report_home(r: Dictionary, wv: Node2D) -> bool:
+	if r.get("entered", false):
+		return true
+	var p := wv.global_position
+	var i := interior_at(p)
+	if i >= 0:
+		return i != int(r.get("inside", -1))
+	var door: Vector2 = r.get("door", Vector2.INF)
+	if door != Vector2.INF and p.distance_to(door) <= float(WITNESS.door_px):
+		var d := _door_node_near(door)
+		if d != null:
+			d.call("interact", wv)
+			return true
+	return town_near(p, WITNESS.home_margin_px) >= 0
+
+
+## World's door node at an outside door spot (group `doors`, with interact(by)), or null.
+func _door_node_near(p: Vector2) -> Node:
+	var best: Node = null
+	var bd := float(WITNESS.door_px) * 3.0
+	for d in get_tree().get_nodes_in_group(&"doors"):
+		if d is Node2D and d.has_method("interact"):
+			var dd := (d as Node2D).global_position.distance_to(p)
+			if dd < bd:
+				bd = dd
+				best = d
+	return best
+
+
+## A witness who saw it outdoors and then went through a door is home. One who saw it indoors has to get
+## out first (left_building), so the necromancer has a chance to stop them inside.
+func _on_entered_building(_building: Node, actor: Node2D) -> void:
+	for r in pending_reports:
+		if r.witness == actor and int(r.get("inside", -1)) < 0:
+			r.entered = true
+
+
+func _on_left_building(_building: Node, actor: Node2D) -> void:
+	for r in pending_reports:
+		if r.witness == actor:
+			r.inside = -1
+
+
+func _nearest_town_point(p: Vector2) -> Vector2:
+	var best := Vector2.INF
+	for t in info.get("towns", []):
+		var c: Vector2 = (t.get("rect", Rect2()) as Rect2).get_center()
+		if best == Vector2.INF or c.distance_to(p) < best.distance_to(p):
+			best = c
+	return best
+
+
+func _on_patrol(n: Node) -> bool:
+	if patrols == null or not is_instance_valid(patrols):
+		return false
+	for p in patrols.out:
+		if p.members.has(n):
+			return true
+	return false
 
 
 # ================================================================ helpers

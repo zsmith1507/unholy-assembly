@@ -6,6 +6,7 @@ func run(t) -> void:
 	Sim.world = world
 	Threats.auto_tick = false
 	Threats.begin_run({"surface_y_px": 120.0, "towns": []})
+	Threats.end_grace() # these checks are about what happens after the grace period
 	var lamp := PointLight2D.new()
 	lamp.position = Vector2(200, 220) # 50 cells down, buried
 	t.root.add_child(lamp)

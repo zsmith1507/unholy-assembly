@@ -9,6 +9,7 @@ func run(t) -> void:
 	var town := {"name": "Ashby", "rect": Rect2(0, 60, 120, 60), "side": -1, "homes": []}
 	var route := PackedVector2Array([Vector2(60, surface), Vector2(700, surface)])
 	Threats.begin_run({"surface_y_px": surface, "towns": [town], "patrol_routes": [route]})
+	Threats.end_grace() # these checks are about what happens after the grace period
 	var patrols = load("res://threats/patrols.gd").new()
 	t.root.add_child(patrols)
 

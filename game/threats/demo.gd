@@ -39,6 +39,7 @@ func _ready() -> void:
 	var ui := CanvasLayer.new()
 	add_child(ui)
 	Threats.begin_run(info)
+	Threats.end_grace() # the demo is for watching the meters move
 	var patrols = load("res://threats/patrols.gd").new()
 	layers.add_child(patrols)
 	var haze = load("res://threats/stench_view.gd").new()

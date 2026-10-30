@@ -62,9 +62,17 @@ func _refresh() -> void:
 		s += "fades after %d s of quiet\n" % ceili(Threats.seconds_until_quiet())
 	s += "patrol: %d farmer%s every %d s%s\n" % [Threats.patrol_size(), "" if Threats.patrol_size() == 1 else "s",
 		roundi(Threats.patrol_interval()), " (night)" if GameState.is_night() else ""]
-	var tier := Threats.next_depth_tier()
-	if not tier.is_empty():
-		s += "deepest %d cells; %s at %d\n" % [roundi(Threats.max_depth_cells), tier.name, int(tier.cells)]
+	if Threats.in_grace():
+		var g := ceili(Threats.grace_left())
+		s += "[color=#9fd]GRACE %d:%02d left[/color]: nothing rises (held off %+.1f Suspicion, %+.1f Hunger)\n" % [
+			g / 60, g % 60, Threats.grace_held.suspicion, Threats.grace_held.hunger]
+	var hs := Threats.hunger_status()
+	if not hs.awake:
+		s += "Hunger asleep until %d cells down (deepest %d)\n" % [int(hs.start_cells), roundi(hs.deepest_cells)]
+	else:
+		var tier := Threats.next_depth_tier()
+		if not tier.is_empty():
+			s += "deepest %d cells; %s at %d\n" % [roundi(Threats.max_depth_cells), tier.name, int(tier.cells)]
 	var led: Array = Threats.ledger
 	var n: int = mini(OVERLAY.lines, led.size())
 	for i in range(led.size() - 1, led.size() - 1 - n, -1):

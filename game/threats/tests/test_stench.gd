@@ -6,6 +6,7 @@ func run(t) -> void:
 	Sim.world = world
 	Threats.auto_tick = false
 	Threats.begin_run({"surface_y_px": 120.0, "towns": []})
+	Threats.end_grace() # these checks are about what happens after the grace period
 	var shallow := Node2D.new()
 	shallow.position = Vector2(100, 140)
 	shallow.add_to_group("item_corpse")

@@ -35,7 +35,7 @@ func tick(dt: float) -> void:
 	var towns: Array = info.get("towns", [])
 	for t in towns.size():
 		if not _next.has(t):
-			_next[t] = float(Threats.PATROL.first_after_s) + t * 20.0
+			_next[t] = Threats.grace_left() + float(Threats.PATROL.first_after_s) + t * 20.0
 		_next[t] = float(_next[t]) - dt
 		if float(_next[t]) <= 0.0:
 			_next[t] = Threats.patrol_interval()
@@ -79,7 +79,9 @@ func send(t: int) -> Dictionary:
 	if members.is_empty():
 		return {}
 	_id += 1
-	var p := {"id": _id, "town": t, "members": members, "route": route, "t": 0.0, "home_t": -1.0, "raid": raid}
+	var p := {"id": _id, "town": t, "members": members, "route": route, "t": 0.0, "home_t": -1.0, "raid": raid,
+		"duration": maxf(float(Threats.PATROL.duration_s), walk_time(route) * float(Threats.PATROL.route_walks)),
+		"home_timeout": float(Threats.PATROL.home_timeout_s)}
 	out.append(p)
 	var what := "raid" if raid else ("graveyard watch" if watch else ("search party" if _searching() else "patrol"))
 	Threats.note("patrol", "a %s of %d left %s%s" % [what, members.size(), _town_name(t),
@@ -88,6 +90,14 @@ func send(t: int) -> Dictionary:
 		Threats.raid_started.emit(Threats.heart_surface_pos())
 	patrol_left.emit(p)
 	return p
+
+
+## Seconds a farmer takes to walk this route once, end to end.
+func walk_time(route: PackedVector2Array) -> float:
+	var d := 0.0
+	for i in range(1, route.size()):
+		d += route[i - 1].distance_to(route[i])
+	return d / maxf(1.0, float(Threats.PATROL.walk_px_per_s))
 
 
 func members_out() -> Array:
@@ -182,14 +192,15 @@ func _update(p: Dictionary, dt: float) -> void:
 	if alive.is_empty():
 		out.erase(p)
 		return
-	if p.home_t < 0.0 and p.t >= Threats.PATROL.duration_s:
+	if p.home_t < 0.0 and p.t >= float(p.get("duration", Threats.PATROL.duration_s)):
 		_head_home(p)
 	if p.home_t >= 0.0:
 		var towns: Array = info.get("towns", [])
 		var rect: Rect2 = towns[p.town].get("rect", Rect2()) if p.town < towns.size() else Rect2()
 		for m in alive.duplicate():
-			var home: bool = rect.grow(Threats.WITNESS.home_margin_px).has_point((m as Node2D).global_position)
-			if home or p.t - p.home_t >= Threats.PATROL.home_timeout_s:
+			var mp := (m as Node2D).global_position
+			var home: bool = rect.grow(Threats.WITNESS.home_margin_px).has_point(mp) or Threats.interior_at(mp) >= 0
+			if home or p.t - p.home_t >= float(p.get("home_timeout", Threats.PATROL.home_timeout_s)):
 				p.members.erase(m)
 				(m as Node).queue_free()
 		if p.members.is_empty():
@@ -204,6 +215,12 @@ func _head_home(p: Dictionary) -> void:
 		return
 	var c: Vector2 = (towns[p.town].get("rect", Rect2()) as Rect2).get_center()
 	var home := PackedVector2Array([Vector2(c.x, Threats.surface_at(c.x))])
+	# far from home in a bigger world: give the stragglers time to walk back
+	var far := 0.0
+	for m in p.members:
+		if is_instance_valid(m):
+			far = maxf(far, Threats.outside_point((m as Node2D).global_position).distance_to(home[0]))
+	p.home_timeout = maxf(float(Threats.PATROL.home_timeout_s), far / maxf(1.0, float(Threats.PATROL.walk_px_per_s)) * 1.5)
 	for m in p.members:
 		_order(m, "set_route", [home])
 		_order(m, "set_mode", [&"home"])
@@ -216,6 +233,8 @@ func _on_noise_heard(at: Vector2, audible: float, source: String) -> void:
 	var r: float = Threats.PATROL.hear_px * sqrt(audible)
 	var sent := 0
 	for m in members_out():
+		if Threats.interior_at((m as Node2D).global_position) >= 0:
+			continue # indoors: they can't hear it over the walls
 		if (m as Node2D).global_position.distance_to(at) <= r:
 			_order(m, "investigate", [at])
 			sent += 1
@@ -225,7 +244,7 @@ func _on_noise_heard(at: Vector2, audible: float, source: String) -> void:
 
 func _on_sighting(at: Vector2, witness: Node2D) -> void:
 	for m in members_out():
-		if m != witness and (m as Node2D).global_position.distance_to(at) <= Threats.PATROL.sighting_call_px:
+		if m != witness and Threats.outside_point((m as Node2D).global_position).distance_to(at) <= Threats.PATROL.sighting_call_px:
 			_order(m, "investigate", [at])
 
 
@@ -274,6 +293,8 @@ func _check_tunnels() -> void:
 	var look: float = Threats.PATROL.tunnel_look_px
 	for m in members_out():
 		var p: Vector2 = (m as Node2D).global_position
+		if Threats.interior_at(p) >= 0:
+			continue # indoors: no ground to look at
 		var x := p.x - look
 		while x <= p.x + look:
 			var c := Sim.to_cell(Vector2(x, Threats.surface_at(x)))

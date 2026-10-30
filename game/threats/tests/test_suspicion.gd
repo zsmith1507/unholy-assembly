@@ -7,6 +7,7 @@ func run(t) -> void:
 	Threats.auto_tick = false
 	var town := {"name": "Ashby", "rect": Rect2(0, 80, 120, 40), "side": -1, "homes": []}
 	Threats.begin_run({"surface_y_px": 120.0, "towns": [town]})
+	Threats.end_grace() # these checks are about what happens after the grace period
 
 	# noise: deeper is quieter
 	var shallow: Dictionary = Threats.noise_cost(Vector2(256, 140), 3.0)
@@ -66,7 +67,11 @@ func run(t) -> void:
 	Events.soul_collected.emit(1.0, "fragments", Vector2.ZERO)
 	t.check(is_equal_approx(GameState.hunger, h0), "fragments don't feed Hunger")
 	Events.soul_collected.emit(1.0, "farmer", Vector2.ZERO)
-	t.check(GameState.hunger > h0, "a human soul raises Hunger")
+	t.check(is_equal_approx(GameState.hunger, h0), "a human soul doesn't feed Hunger while it sleeps (shallow lair)")
+	Threats.hunger_woken = true
+	h0 = GameState.hunger
+	Events.soul_collected.emit(1.0, "farmer", Vector2.ZERO)
+	t.check(GameState.hunger > h0, "a human soul raises Hunger once it has woken")
 
 	# patrol sizing scales with Suspicion
 	t.check(Threats.patrol_size(90.0) > Threats.patrol_size(0.0), "bigger patrols at high Suspicion")
