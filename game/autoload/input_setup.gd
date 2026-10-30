@@ -23,6 +23,10 @@ const ACTIONS := {
 	"spell_8": [KEY_8],
 	"pause": [KEY_ESCAPE, KEY_P, ["button", JOY_BUTTON_START]],
 	"advisor": [KEY_F1, ["button", JOY_BUTTON_BACK]], ## open Eyegor's clipboard
+	"attack": [KEY_F, ["mouse", MOUSE_BUTTON_MIDDLE], ["button", JOY_BUTTON_B]], ## stab with the equipped weapon (no mana)
+	"build_menu": [KEY_B, ["button", JOY_BUTTON_Y]], ## open the build menu
+	"talents": [KEY_K, ["button", JOY_BUTTON_RIGHT_STICK]], ## open the talent and skill trees
+	"inventory": [KEY_I, ["button", JOY_BUTTON_LEFT_STICK]], ## open the necromancer's satchel
 	"debug_console": [KEY_QUOTELEFT],
 }
 

@@ -37,6 +37,15 @@ signal night_started(day: int)
 signal spell_selected(spell_id: StringName)
 signal spell_cast(spell_id: StringName, at: Vector2)
 
+# --- round 5: inventory, buildings, progression ---
+signal inventory_changed(kind: StringName, amount: float, total: float) ## amount is the change (+/-), total the new count
+signal entered_building(building: Node, actor: Node2D) ## an actor stepped through a door into an interior
+signal left_building(building: Node, actor: Node2D) ## an actor stepped back out
+signal talent_learned(id: StringName, rank: int)
+signal skill_points_changed(points: int)
+signal build_placement_started(kind: StringName) ## the build menu picked a structure; the necromancer shows its ghost
+signal build_placement_ended(kind: StringName, placed: bool)
+
 # --- narrative ---
 signal milestone_reached(id: StringName) ## Eyegor reacts, the HUD announces
 signal advisor_line(text: String, mood: StringName) ## something wants Eyegor to say a line

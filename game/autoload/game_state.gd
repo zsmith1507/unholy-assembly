@@ -27,6 +27,12 @@ var heart: Node2D = null
 var heart_pos := Vector2.ZERO
 var heart_radius := 0.0 ## in game pixels
 
+## The necromancer's satchel: harvested components. Kinds: &"flesh", &"bones", &"blood" (and later more).
+## Amounts are abstract units (a whole fresh adult is roughly flesh 6, bones 4, blood 3; see Bodies and Souls).
+## Souls never go in the satchel: they always go to the heart (GameState.souls).
+var inventory := {}
+const INVENTORY_CAP := 99.0 ## per kind; tunable
+
 var day := 1
 var hour := 20.0 ## 0-24; the run opens at dusk
 var unlocks := {} ## id -> true
@@ -50,6 +56,7 @@ func reset() -> void:
 	heart = null
 	heart_pos = Vector2.ZERO
 	heart_radius = 0.0
+	inventory = {}
 	day = 1
 	hour = 20.0
 	unlocks = {}
@@ -120,6 +127,42 @@ func refill_mana_from_heart() -> float:
 	Events.souls_changed.emit(souls)
 	Events.mana_changed.emit(mana, max_mana)
 	return take
+
+
+# ---------------------------------------------------------------- inventory (the necromancer's satchel)
+
+## Add components. Returns how much fitted (the rest is lost over the cap).
+func add_item(kind: StringName, amount: float) -> float:
+	if amount <= 0.0:
+		return 0.0
+	var have: float = inventory.get(kind, 0.0)
+	var fit := minf(amount, INVENTORY_CAP - have)
+	if fit <= 0.0:
+		return 0.0
+	inventory[kind] = have + fit
+	Events.inventory_changed.emit(kind, fit, inventory[kind])
+	return fit
+
+
+func item_count(kind: StringName) -> float:
+	return inventory.get(kind, 0.0)
+
+
+func has_items(cost: Dictionary) -> bool:
+	for k in cost:
+		if item_count(k) + 0.0001 < float(cost[k]):
+			return false
+	return true
+
+
+## Take a whole recipe ({&"flesh": 4, &"bones": 2}) or nothing. Returns true if taken.
+func take_items(cost: Dictionary) -> bool:
+	if not has_items(cost):
+		return false
+	for k in cost:
+		inventory[k] = maxf(0.0, item_count(k) - float(cost[k]))
+		Events.inventory_changed.emit(k, -float(cost[k]), inventory[k])
+	return true
 
 
 # ---------------------------------------------------------------- meters
