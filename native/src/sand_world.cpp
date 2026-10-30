@@ -264,7 +264,7 @@ void SandWorld::crumble(int i, int t) {
 	const tune::CrumbleTune &C = tune::CRUMBLE;
 	float r = rnd();
 	bool was_burning = burn[i] != 0;
-	if (was_burning && (t == WOOD || t == PLANK || t == FLESH || t == GIBS)) {
+	if (was_burning && (is_timber(t) || t == FLESH || t == GIBS)) {
 		put(i, EMBER);
 		burn[i] = (uint16_t)(120 + (int)(rnd() * 200));
 	} else if (t == EARTH || t == GRASS) {
@@ -275,7 +275,7 @@ void SandWorld::crumble(int i, int t) {
 		put(i, r < C.brick_rubble ? RUBBLE : EMPTY);
 	} else if (t == BONE) {
 		put(i, r < C.bone_shards ? BONEBIT : EMPTY);
-	} else if (t == WOOD || t == PLANK) {
+	} else if (is_timber(t)) {
 		put(i, r < C.wood_ash ? ASH : EMPTY);
 	} else if (t == CLAY) {
 		put(i, r < C.clay_dirt ? DIRT : EMPTY);
@@ -404,7 +404,7 @@ void SandWorld::explode(int cx, int cy, int r, float force) {
 			}
 			bool was_static = d.kind == K_STATIC;
 			if (rnd() < B.debris) { // some of it flies as debris
-				int deb = was_static ? (d.loose ? d.loose : (t == WOOD || t == PLANK ? EMBER : RUBBLE)) : t;
+				int deb = was_static ? (d.loose ? d.loose : (is_timber(t) ? EMBER : RUBBLE)) : t;
 				put(i, deb);
 				if (deb == EMBER) {
 					burn[i] = (uint16_t)(150 + (int)(rnd() * 200));
@@ -610,7 +610,7 @@ void SandWorld::land(Body &b) {
 				continue;
 			}
 			int t = mat[q];
-			int lt = md(t).loose ? md(t).loose : ((t == WOOD || t == PLANK) ? ASH : 0);
+			int lt = md(t).loose ? md(t).loose : (is_timber(t) ? ASH : 0);
 			if (!lt) {
 				continue;
 			}
@@ -847,7 +847,15 @@ void SandWorld::render_region(const Ref<Image> &image, int x0, int y0) {
 				continue;
 			}
 			float r, g, b;
-			rgb_of(d.colors[shade[i] >> 6], r, g, b);
+			if (t == COFFIN) {
+				uint8_t s = shade[i];
+				if (s == 6 && !(wy > 0 && wy < h - 1 && mat[i - w] == COFFIN && mat[i + w] == COFFIN)) {
+					s = 128; // a seam on the edge of the planking (a thin lid or wall) shows as board
+				}
+				coffin_rgb(s, r, g, b);
+			} else {
+				rgb_of(d.colors[shade[i] >> 6], r, g, b);
+			}
 			uint8_t alpha = 255;
 			float f = 1.0f;
 			if (k == K_GAS) {
@@ -1063,7 +1071,9 @@ void SandWorld::set_cells(const PackedByteArray &cells) {
 	for (int i = 0; i < n; i++) {
 		uint8_t sh = shade[i];
 		put(i, src[i] < MAT_COUNT ? src[i] : EMPTY);
-		shade[i] = sh;
+		if (mat[i] != COFFIN) {
+			shade[i] = sh;
+		}
 		mov[i] = md(mat[i]).kind == K_POWDER ? 1 : 0;
 		heat[i] = 0;
 	}
@@ -1177,4 +1187,5 @@ void SandWorld::_bind_methods() {
 	BIND_MAT(EMBALM);
 	BIND_MAT(GIBS);
 	BIND_MAT(CLAY);
+	BIND_MAT(COFFIN);
 }

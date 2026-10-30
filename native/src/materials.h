@@ -49,6 +49,7 @@ enum Mat : uint8_t {
 	EMBALM = 28, // embalming fluid
 	GIBS = 29, // processed flesh, powder
 	CLAY = 30,
+	COFFIN = 31, // coffin planks: static, burns and digs like wood, drawn with a plank grain (see COFFIN_GRAIN)
 	MAT_COUNT = 64,
 };
 
@@ -90,5 +91,10 @@ const MatDef &mat_def(int id);
 extern MatDef g_defs[MAT_COUNT];
 inline const MatDef &md(int id) { return g_defs[id]; } // no bounds check: ids in the grid are always < MAT_COUNT
 float mix_rate(int a, int b); // chance per tick two liquids blend (0 = never)
+inline bool is_timber(int t) { return t == WOOD || t == PLANK || t == COFFIN; } // burns to embers and ash
+// Coffin planks: the grain is fixed by where a cell was laid (stored in its shade, so it moves with the cell if the
+// coffin falls). coffin_grain gives that shade; coffin_rgb turns it into a colour.
+uint8_t coffin_grain(int x, int y);
+void coffin_rgb(uint8_t shade, float &r, float &g, float &b);
 
 } // namespace unholy

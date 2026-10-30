@@ -80,7 +80,7 @@ constexpr MatVal SOAK[] = {
 	{ STONE, 0.3f }, { BONE, 0.4f }, { WOOD, 0.75f }, { EMBER, 0.5f }, { DIRT, 1.1f }, { MUD, 0.9f }, { ASH, 1.3f },
 	{ FLESH, 1.0f }, { EARTH, 0.9f }, { RUBBLE, 0.6f }, { BEDROCK, 0.15f }, { BONEBIT, 0.4f },
 	{ GRASS, 0.9f }, { LEAVES, 0.8f }, { PLANK, 0.7f }, { BRICK, 0.35f }, { SAND, 1.2f }, { SNOW, 1.0f },
-	{ GIBS, 1.0f }, { CLAY, 0.5f },
+	{ GIBS, 1.0f }, { CLAY, 0.5f }, { COFFIN, 0.75f },
 };
 // ABSORB (new, from the design doc: "soil soaks liquids up, but stone holds them"): chance per tick that a liquid cell
 // touching this ground is drunk into it. Each ground cell holds about three cells of liquid (it shows as a dark wet
@@ -132,6 +132,7 @@ constexpr FireDef FIRE[] = {
 	{ EMBER, 0, 120, 320, 1.4f, 0.025f, 1, 0, 0 },
 	// new materials
 	{ PLANK, 7, 800, 1300, 3.2f, 0.09f, 1, 0, 0 },
+	{ COFFIN, 7, 900, 1500, 3.2f, 0.09f, 1, 0, 0 }, // coffin planks burn like coffin wood
 	{ LEAVES, 3, 40, 90, 3.0f, 0.15f, 1, 0, 0 },
 	{ GRASS, 5, 60, 140, 2.0f, 0.08f, 1, 0, 0 },
 	{ GIBS, 5, 300, 520, 3.4f, 0.07f, 1, 0, 0 },
@@ -226,6 +227,19 @@ struct CrushTune {
 	int max_events = 256; // events kept if nobody collects them
 };
 constexpr CrushTune CRUSH{};
+
+// ---------------------------------------------------------------- coffin planks (M_COFFIN)
+// Boards run along x. Each board is `board` cells tall with a dark seam on its top row, and `length` cells long
+// with a dark butt joint (staggered board to board). Inside a board the grain is long light and dark streaks along
+// x; now and then a dark knot. A seam only shows inside thick planking (a one-cell lid is all board). Colours: dark, mid and light wood, then the seam colour.
+struct CoffinGrainTune {
+	int board = 3; // cells per board, top to bottom
+	int length = 21; // cells per board, end to end
+	float streak = 0.30f; // how strong the light/dark streaks are (0-0.5)
+	float knot = 0.012f; // share of cells that are knots
+	uint32_t dark = 0x3b2414, mid = 0x6b4527, light = 0x8f6337, seam = 0x22140b;
+};
+constexpr CoffinGrainTune COFFIN_GRAIN{};
 
 // ---------------------------------------------------------------- shading (render_region)
 // Ground gets a lit rim where it meets open air above, a shadow on undersides (tunnel ceilings, overhangs) and grows

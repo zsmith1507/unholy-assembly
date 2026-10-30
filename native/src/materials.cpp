@@ -96,6 +96,10 @@ void init_materials() {
 	liquid(EMBALM, 7, 0.02f, 0.7f);
 	g_defs[GIBS] = def("Gibs", K_POWDER, 2.0f, 0.4f, 0x7a3f3f, 0x6c3636, 0x864848, 0x5f2f2f);
 	g_defs[CLAY] = def("Clay", K_STATIC, 99, 1.6f, 0x5e4436, 0x553d30, 0x684c3d, 0x4b362a);
+	{
+		const tune::CoffinGrainTune &G = tune::COFFIN_GRAIN; // drawn from the grain, not these four (see coffin_rgb)
+		g_defs[COFFIN] = def("Coffin Plank", K_STATIC, 99, 2.0f, G.dark, G.mid, G.light, G.seam);
+	}
 
 	// ---- tuning blocks (tuning.h) ----
 	using namespace tune;
@@ -198,6 +202,57 @@ void init_materials() {
 	g_defs[GRASS].loose = DIRT;
 	g_defs[CLAY].loose = DIRT;
 	g_defs[BRICK].loose = RUBBLE;
+}
+
+static inline uint32_t hash2(int x, int y, uint32_t salt) {
+	uint32_t h = (uint32_t)x * 0x8da6b343u ^ (uint32_t)y * 0xd8163841u ^ salt * 0xcb1ab31fu;
+	h ^= h >> 13;
+	h *= 0x5bd1e995u;
+	h ^= h >> 15;
+	return h;
+}
+
+// shade: 0-15 seam or knot core, 16-255 dark .. mid .. light wood
+uint8_t coffin_grain(int x, int y) {
+	const tune::CoffinGrainTune &G = tune::COFFIN_GRAIN;
+	int board = y >= 0 ? y / G.board : (y - G.board + 1) / G.board;
+	int row = y - board * G.board;
+	if (row == 0) {
+		return 6; // seam between boards (render_region draws it only inside thick planking)
+	}
+	int off = (int)(hash2(board, 0, 7) % (uint32_t)G.length);
+	int run = x + off;
+	int seg = run >= 0 ? run / G.length : (run - G.length + 1) / G.length;
+	if (run - seg * G.length == 0) {
+		return 10; // butt joint
+	}
+	if ((hash2(x, y, 3) & 0xffff) < (uint32_t)(G.knot * 65536)) {
+		return 2; // knot
+	}
+	// each board its own tone; long streaks along x (coarse noise, smoothed over a few cells)
+	float tone = 0.45f + ((hash2(board, seg, 11) & 255) / 255.0f - 0.5f) * 0.3f;
+	int s0 = (x + (int)(hash2(board, row, 5) & 15)) >> 2;
+	float f = ((x + (int)(hash2(board, row, 5) & 15)) & 3) / 4.0f;
+	float n0 = (hash2(s0, board * 8 + row, 13) & 255) / 255.0f, n1 = (hash2(s0 + 1, board * 8 + row, 13) & 255) / 255.0f;
+	tone += (n0 + (n1 - n0) * f - 0.5f) * 2.0f * G.streak;
+	tone = std::min(1.0f, std::max(0.0f, tone));
+	return (uint8_t)(16 + tone * 239);
+}
+
+void coffin_rgb(uint8_t shade, float &r, float &g, float &b) {
+	const tune::CoffinGrainTune &G = tune::COFFIN_GRAIN;
+	if (shade < 16) {
+		r = (float)ch(G.seam, 16);
+		g = (float)ch(G.seam, 8);
+		b = (float)ch(G.seam, 0);
+		return;
+	}
+	float t = (shade - 16) / 239.0f;
+	uint32_t a = t < 0.5f ? G.dark : G.mid, c = t < 0.5f ? G.mid : G.light;
+	float k = t < 0.5f ? t * 2 : t * 2 - 1;
+	r = ch(a, 16) + (ch(c, 16) - ch(a, 16)) * k;
+	g = ch(a, 8) + (ch(c, 8) - ch(a, 8)) * k;
+	b = ch(a, 0) + (ch(c, 0) - ch(a, 0)) * k;
 }
 
 const MatDef &mat_def(int id) {

@@ -21,7 +21,7 @@ inline bool stainable(int t) {
 	Kind k = md(t).kind;
 	return k == K_STATIC || k == K_POWDER;
 }
-inline bool timber(int t) { return t == WOOD || t == PLANK; }
+inline bool timber(int t) { return is_timber(t); }
 inline bool meat(int t) { return t == FLESH || t == GIBS; }
 } // namespace
 
@@ -55,6 +55,9 @@ void SandWorld::put(int i, int m) {
 	st_i[i] = 0;
 	mx_t[i] = 0;
 	mx_a[i] = 0;
+	if (m == COFFIN) {
+		shade[i] = coffin_grain(i % w, i / w);
+	}
 	const MatDef &d = md(m);
 	life[i] = d.life_max ? (int16_t)(d.life_min + (int)(rnd() * (d.life_max - d.life_min))) : 0;
 	if (m == EMBER) {
