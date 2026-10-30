@@ -17,10 +17,14 @@ const CORPSE := {
 	"blood_seconds": 90.0, ## the blood timer: a fresh body's blood is gone (dried, drained) after this
 	"pull_scale": 0.85, ## share of Harvest's pull a whole body feels (a body drags in a bit slower than a part)
 	"flail": 0.6, ## extra pull on each limb's far end, divided by its weight (light limbs fly ahead)
-	"joint_strength": 22.0, ## a joint tears when strain reaches this × weight; strain grows by pull ÷ weight per tick
-	"old_joint_strength": 11.0, ## graveyard bodies come apart easily
+	## Harvest takes a body apart as it pulls: every joint gathers strain each tick it is pulled, and tears
+	## at tear_ticks × its weight (arms 1, head 2, legs 3), so arms go first, then the head, then the legs,
+	## and the torso is what is left. At 60 ticks a second a fresh body is in pieces in about a second.
+	"tear_ticks": 18.0, ## ticks of pulling an arm holds on a fresh body
+	"old_tear_ticks": 10.0, ## graveyard bodies come apart easily
+	"pull_strain": 0.6, ## extra strain per tick for each px/tick² of pull (a hard tug tears sooner)
 	"stuck_speed": 1.0, ## px per tick: a pulled body moving slower than this is being held back and strains
-	"free_strain": 0.15, ## share of strain gathered while it is flying freely toward the hand
+	"stuck_strain": 2.0, ## strain gathers this many times faster while it is held back (wedged, buried)
 	"strain_relax": 0.97, ## strain kept per tick when nobody is pulling
 	"pump_rate": 0.55, ## chance per tick that a fresh wound squirts a cell of blood (times its strength)
 	"pump_beat": 7.0, ## heartbeat-ish pulse, radians per second (the heart has stopped; the gore has not)
@@ -38,7 +42,17 @@ const CORPSE := {
 	"jitter": 0.15,
 	"unstick_ticks": 60, ## pulled this long without headway, the grave-wind draws it through the earth regardless
 	"unstick_speed": 0.15, ## px per tick toward the pull that counts as headway
-	"ghost_ticks": 20, ## how long a body drawn through earth keeps passing through it after reaching air ## px per tick of random wobble per point at death, so no two bodies fall alike
+	"ghost_ticks": 20, ## how long a body drawn through earth keeps passing through it after reaching air
+}
+
+## A body in its coffin wakes (shows, smells, can be pulled and hauled) once the coffin is opened: a cell
+## of its wooden shell gone, earth falling in, or the ground over the lid dug away to air. No Harvest needed.
+const COFFIN := {
+	"check_ticks": 10, ## look at the sim this often (staggered per body), cheap
+	"search_cells": 40, ## how far from the body to look for the coffin's walls
+	"lid_air": 3, ## this many more open cells just above the lid than when it was buried and it counts as dug out
+	"fill_cells": 3, ## this many more filled cells inside the coffin (earth poured in) and it is open
+	"fallback_loss": 3, ## no hollow found: this many cells round the body dug away and it is open
 }
 
 var look := "villager"
@@ -60,6 +74,8 @@ var _rig: BodyRig
 var _t := 0.0
 var _last_pos := Vector2.ZERO
 var _still := 0
+var _consumed := false
+var _coffin := {} ## the coffin as first seen: interior Rect2i (cells), and baseline counts
 
 
 func _init() -> void:
@@ -101,6 +117,7 @@ func _ready() -> void:
 	add_to_group(&"pullable")
 	add_to_group(&"siphonable")
 	add_to_group(&"corpses")
+	add_to_group(&"harvestable")
 	if interred:
 		add_to_group(&"grave_corpses")
 		remove_from_group(&"item_corpse") # nobody can smell or haul it until it is dug up
@@ -118,20 +135,96 @@ func _ready() -> void:
 func exhume() -> void:
 	if not interred:
 		return
-	interred = false
-	visible = true
 	# the coffin is snug and the grave dirt is packed round it: whatever is in the earth passes up through it
 	for k in pts:
 		if Sim.solid_at(pts[k]):
 			ghost[k] = 0
+	uncover()
+
+
+## The body is out in the open (its coffin broken or dug out): a normal visible corpse from now on.
+func uncover() -> void:
+	if not interred:
+		return
+	interred = false
+	visible = true
 	remove_from_group(&"grave_corpses")
 	add_to_group(&"item_corpse")
 	asleep = false
+	_still = 0
+	Events.noise_made.emit(global_position, 0.05, "coffin")
+
+
+## True once the coffin round this buried body has been opened (see COFFIN). Reads a few sim rects.
+func coffin_open() -> bool:
+	var w: SandWorld = Sim.world
+	if w == null:
+		return false
+	if _coffin.is_empty():
+		_coffin = _measure_coffin(w)
+		return false
+	if _coffin.has("fallback"):
+		return _filled(w, _coffin.fallback) <= int(_coffin.base) - COFFIN.fallback_loss
+	var inner: Rect2i = _coffin.inner
+	var shell := _filled(w, inner.grow(1)) - _filled(w, inner)
+	if shell < int(_coffin.shell):
+		return true # a plank is gone
+	if _filled(w, inner) >= int(_coffin.fill) + COFFIN.fill_cells:
+		return true # earth has poured in
+	var lid: Rect2i = _coffin.lid
+	return lid.get_area() - _filled(w, lid) >= int(_coffin.lid_air) + COFFIN.lid_air
+
+
+## Non-empty cells in a rect of cells.
+static func _filled(w: SandWorld, r: Rect2i) -> int:
+	var counts: Dictionary = w.count_rect(r.position.x, r.position.y, r.size.x, r.size.y)
+	return r.get_area() - int(counts.get(SandWorld.M_EMPTY, 0))
+
+
+## Find the hollow the body lies in (walking out from the hip to the walls) and remember how it looks.
+func _measure_coffin(w: SandWorld) -> Dictionary:
+	var c := Sim.to_cell(pts.get("hip", global_position))
+	var reach: int = COFFIN.search_cells
+	if not w.in_bounds(c.x, c.y) or not w.is_empty(c.x, c.y):
+		return _fallback(w)
+	var ends := []
+	for d in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var p := c
+		var n := 0
+		while n < reach and w.in_bounds(p.x + d.x, p.y + d.y) and w.is_empty(p.x + d.x, p.y + d.y):
+			p += d
+			n += 1
+		if n >= reach or not w.in_bounds(p.x + d.x, p.y + d.y):
+			return _fallback(w) # open to the side: not a closed box
+		ends.append(p)
+	var inner := Rect2i(ends[0].x, ends[2].y, ends[1].x - ends[0].x + 1, ends[3].y - ends[2].y + 1)
+	var lid := Rect2i(inner.position.x, inner.position.y - 2, inner.size.x, 1)
+	return {
+		"inner": inner,
+		"shell": _filled(w, inner.grow(1)) - _filled(w, inner),
+		"fill": _filled(w, inner),
+		"lid": lid,
+		"lid_air": lid.get_area() - _filled(w, lid),
+	}
+
+
+func _fallback(w: SandWorld) -> Dictionary:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for k in pts:
+		lo = lo.min(pts[k])
+		hi = hi.max(pts[k])
+	var a := Sim.to_cell(lo)
+	var b := Sim.to_cell(hi)
+	var r := Rect2i(a, b - a + Vector2i.ONE).grow(2)
+	return {"fallback": r, "base": _filled(w, r)}
 
 
 func _physics_process(delta: float) -> void:
 	_t += delta
 	if interred:
+		if (Engine.get_physics_frames() + get_instance_id()) % COFFIN.check_ticks == 0 and coffin_open():
+			uncover()
 		return
 	if carrier != null:
 		var shift := global_position - _last_pos
@@ -312,8 +405,8 @@ func apply_pull(force: Vector2) -> void:
 		pts[k] = BodyRig.collide_point(pts[k], pts[k] + body_force * (1.0 + lead), _g(k))
 	var f := force.length()
 	var stuck := body_velocity().length() < CORPSE.stuck_speed
-	var gain := f * (1.0 if stuck else CORPSE.free_strain)
-	var limit: float = CORPSE.joint_strength if fresh else CORPSE.old_joint_strength
+	var gain := (1.0 + f * CORPSE.pull_strain) * (CORPSE.stuck_strain if stuck else 1.0)
+	var limit: float = CORPSE.tear_ticks if fresh else CORPSE.old_tear_ticks
 	var weakest := ""
 	var weakest_left := INF
 	for seg in BodyRig.SEGS:
@@ -323,7 +416,7 @@ func apply_pull(force: Vector2) -> void:
 		var w: float = BodyRig.WEIGHT[k]
 		var tip: Vector2 = pts[seg[2]]
 		pts[seg[2]] = BodyRig.collide_point(tip, tip + force * CORPSE.flail / w, _g(seg[2]))
-		strain[k] += gain / w
+		strain[k] += gain
 		var left: float = limit * w - strain[k]
 		if left < weakest_left:
 			weakest_left = left
@@ -385,12 +478,54 @@ func _become_torso() -> Node2D:
 func _spawn_part(part_name: String, a: Vector2, b: Vector2, vel: Vector2) -> BodyPart:
 	var part := BodyPart.new()
 	part.setup(look, part_name, a, b, vel, fresh and blood > 0.0, blood)
+	part.flesh = _flesh_left()
 	if not fresh:
 		part.make_old()
 	var parent := get_parent()
 	if parent != null:
 		parent.add_child(part)
 	return part
+
+
+# ---------------------------------------------------------------- Harvest components
+
+## Share of a fresh body's flesh still on it (Siphon eats it), 0..1.
+func _flesh_left() -> float:
+	return clampf(flesh / (1.0 if fresh else CORPSE.old_flesh), 0.0, 1.0)
+
+
+## The Components hook: what the pieces still on this body would yield to Harvest right now.
+## A whole fresh adult is flesh 6, bones 4, blood 3 (BodyPart.YIELD); old bodies flesh and bones only.
+func components() -> Dictionary:
+	if _consumed:
+		return {}
+	var out := {}
+	var fl := _flesh_left()
+	var bl := blood if fresh else 0.0
+	for seg in BodyRig.SEGS:
+		if attached.get(seg[0], false):
+			out = BodyPart.add_yields(out, BodyPart.yield_of(BodyRig.PART[seg[0]], fl, bl, not fresh))
+	return out
+
+
+## Harvest takes the whole body: returns its yield (the Necromancer puts it in the satchel), spills a
+## little gore and frees it. Its soul is not here: that left at death, by the souls rule.
+func consume() -> Dictionary:
+	if _consumed:
+		return {}
+	var got := components()
+	_consumed = true
+	var pieces := 0
+	for k in attached:
+		if attached[k]:
+			pieces += 1
+	for g in [&"harvestable", &"pullable", &"siphonable", &"items", &"item_corpse", &"corpses", &"grave_corpses"]:
+		remove_from_group(g)
+	if is_inside_tree():
+		BodyPart.spill_gore(pts.get("hip", global_position) + Vector2(0, -4), got, pieces)
+	carrier = null
+	queue_free()
+	return got
 
 
 # ---------------------------------------------------------------- Siphon

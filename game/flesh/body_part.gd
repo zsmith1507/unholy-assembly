@@ -25,6 +25,20 @@ const PART := {
 	"lead": 0.5, ## Harvest pulls the leading end this much harder (and the trailing end this much softer)
 }
 
+## What each piece of a body yields to Harvest (the satchel's flesh, bones and blood). The six pieces of
+## a whole fresh adult add up to flesh 6, bones 4, blood 3; the torso holds most of the blood.
+## Blood only while the blood timer lasts (it scales with the blood left); graveyard bodies are old meat.
+const YIELD := {
+	"arm": {"flesh": 0.5, "bones": 0.5, "blood": 0.25},
+	"head": {"flesh": 0.5, "bones": 0.5, "blood": 0.25},
+	"leg": {"flesh": 1.25, "bones": 0.75, "blood": 0.25},
+	"torso": {"flesh": 2.0, "bones": 1.0, "blood": 1.75},
+	"old_flesh": 0.6, ## graveyard bodies have this share of their flesh left (bones keep; no blood)
+	"snap": 0.05, ## yields are rounded to this, so the satchel shows tidy numbers
+	"gore_blood": 3, ## cells of blood spilled per unit of blood harvested
+	"gore_gibs": 2, ## cells of gibs spilled per piece harvested
+}
+
 var look := "villager"
 var part := "arm"
 var blood := 0.0
@@ -43,6 +57,7 @@ var _sprite: Sprite2D
 var _last_pos := Vector2.ZERO
 var _old := false
 var _still := 0
+var _consumed := false
 
 
 func _init() -> void:
@@ -74,6 +89,7 @@ func _ready() -> void:
 	add_to_group(&"pullable")
 	add_to_group(&"siphonable")
 	add_to_group(&"body_parts")
+	add_to_group(&"harvestable")
 	_sprite = Sprite2D.new()
 	_sprite.texture = ArtLib.body_parts(look)[part]
 	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -183,6 +199,61 @@ func apply_pull(force: Vector2) -> void:
 		_stuck_pull = 0
 	a = BodyRig.collide_point(a, a + f * (1.0 - lead), ghost_a >= 0)
 	b = BodyRig.collide_point(b, b + f * (1.0 + lead), ghost_b >= 0)
+
+
+# ---------------------------------------------------------------- Harvest components
+
+## What one piece yields: `flesh_left` and `blood_left` are 0..1 shares of a fresh piece's flesh and blood.
+static func yield_of(part_name: String, flesh_left: float, blood_left: float, old: bool) -> Dictionary:
+	var base: Dictionary = YIELD.get(part_name, YIELD.arm)
+	var fl := flesh_left * (float(YIELD.old_flesh) if old else 1.0)
+	var out := {}
+	var amounts := {&"flesh": base.flesh * fl, &"bones": base.bones, &"blood": 0.0 if old else base.blood * blood_left}
+	for k in amounts:
+		var v := snappedf(maxf(0.0, amounts[k]), YIELD.snap)
+		if v > 0.0:
+			out[k] = v
+	return out
+
+
+## Add two yields together.
+static func add_yields(a: Dictionary, b: Dictionary) -> Dictionary:
+	var out := a.duplicate()
+	for k in b:
+		out[k] = snappedf(float(out.get(k, 0.0)) + float(b[k]), YIELD.snap)
+	return out
+
+
+## Spill a little gore for a harvested yield at `at`.
+static func spill_gore(at: Vector2, got: Dictionary, pieces: int) -> void:
+	var blood_cells := int(round(float(got.get(&"blood", 0.0)) * YIELD.gore_blood))
+	if blood_cells > 0:
+		Sim.spill_px(at, SandWorld.M_BLOOD, blood_cells, Vector2(randf_range(-0.8, 0.8), -0.8))
+	if got.get(&"flesh", 0.0) > 0.0:
+		Sim.spill_px(at, SandWorld.M_GIBS, YIELD.gore_gibs * pieces, Vector2(randf_range(-0.6, 0.6), -0.6))
+
+
+## The Components hook: what this piece would yield to Harvest right now.
+func components() -> Dictionary:
+	if _consumed:
+		return {}
+	return yield_of(part, clampf(flesh, 0.0, 1.0), blood, _old)
+
+
+## Harvest takes this piece: returns its yield (the Necromancer puts it in the satchel), spills a little
+## gore and frees the piece. Souls never come this way: a body's soul left it when it died.
+func consume() -> Dictionary:
+	if _consumed:
+		return {}
+	var got := components()
+	_consumed = true
+	for g in [&"harvestable", &"pullable", &"siphonable", &"items", &"item_part", &"body_parts"]:
+		remove_from_group(g)
+	if is_inside_tree():
+		spill_gore(global_position, got, 1)
+	carrier = null
+	queue_free()
+	return got
 
 
 ## Siphon asks for `amount` souls' worth; returns what it got. Fresh (bloody) parts give double.
