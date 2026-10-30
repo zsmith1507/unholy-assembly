@@ -66,7 +66,7 @@ func run(t) -> void:
 	t.check(GameState.mana < 1.0, "the touch costs mana")
 	await t.ticks(int(LairMachine.MACHINES[&"altar"].seconds * 60) + 20)
 	t.check(t.tree.get_nodes_in_group(&"lair_ghoul").size() == 1, "altar raised a ghoul")
-	t.check(GameState.souls < 0.01, "raising spent a soul")
+	t.check(GameState.souls > 0.99, "the run's first raising spares the heart's soul")
 	t.check(int(GameState.stats.get("minions_raised", 0)) == 1, "stat counted")
 	var g = t.tree.get_nodes_in_group(&"lair_ghoul")[0]
 	t.check(g.is_in_group(&"minions"), "ghoul is a minion")

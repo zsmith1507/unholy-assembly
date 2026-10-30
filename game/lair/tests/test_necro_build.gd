@@ -36,7 +36,7 @@ func run(t) -> void:
 	await t.ticks(1)
 	var heart = build.last_placed
 	t.check(heart is NecroticHeart and GameState.has_heart, "cast places the real heart")
-	t.check(absf(GameState.mana - (1.0 - float(b.cost(&"heart").mana))) < 0.001, "he pays the heart's cost once")
+	t.check(GameState.mana > 0.999, "the first heart is free (mana %.2f)" % GameState.mana)
 	t.check(build.current_kind() == &"grinder", "next up is the grinder")
 
 	GameState.mana = 1.0

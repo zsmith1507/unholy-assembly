@@ -18,6 +18,14 @@ func _ready() -> void:
 		add_child(sprite)
 
 
+## Plays a sprite animation if the sprite has it and isn't already playing it.
+func play_anim(anim: StringName) -> void:
+	if sprite == null or sprite.sprite_frames == null or not sprite.sprite_frames.has_animation(anim):
+		return
+	if sprite.animation != anim:
+		sprite.play(anim)
+
+
 ## Footprint in pixels, world space.
 func get_rect() -> Rect2:
 	return Rect2(global_position.x - footprint.x * 0.5, global_position.y - footprint.y, footprint.x, footprint.y)

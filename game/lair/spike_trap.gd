@@ -20,6 +20,7 @@ func _init() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	play_anim(&"idle" if armed else &"work") # sprung shows "work" until it re-arms
 	if not armed:
 		_rearm -= delta
 		if _rearm <= 0.0:

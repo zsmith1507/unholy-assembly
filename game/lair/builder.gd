@@ -16,9 +16,13 @@ const BUILD := {
 	"floor_give_px": 8.0, # dug floors are bumpy: bumps this high inside the footprint are levelled when it is
 		# built, and a column counts as standing if ground is within this far below the footprint
 	"overlap_margin_px": 2.0,
+	"first_heart_free": true, # the first heart of each run costs nothing (playtest note 7)
+	# Kinds the build menu offers from the start; anything else waits for GameState.unlock("build_<kind>").
+	"unlocked_at_start": [&"heart", &"grinder", &"stitching_table", &"altar", &"spike_trap"],
 }
 
 var parent_layer: Node = null ## where placed structures go; defaults to this node's parent
+var _free_heart_frame := -1
 
 
 func _ready() -> void:
@@ -29,8 +33,28 @@ func kinds() -> Array[StringName]:
 	return [&"heart", &"grinder", &"stitching_table", &"altar", &"spike_trap"]
 
 
+## What building `kind` costs now, e.g. {"mana": 0.2}. The first heart of a run is free: `{}` until one has
+## been built this run (GameState.stats.built_heart, which resets with the run). Also free on the very frame
+## the first heart is placed, so a caller that reads the cost just after `place()` doesn't charge for it.
 func cost(kind: StringName) -> Dictionary:
+	if kind == &"heart" and BUILD.first_heart_free:
+		var built := int(GameState.stats.get("built_heart", 0))
+		if built == 0 or (built == 1 and _free_heart_frame == Engine.get_physics_frames()):
+			return {}
 	return BUILD.costs.get(kind, {})
+
+
+## For Eyegor's build menu: {name, cost, footprint, unlocked, blurb}. Names and blurbs are Eyegor's lines
+## `build_<kind>` and `desc_<kind>` (plain fallbacks in LairText).
+func describe(kind: StringName) -> Dictionary:
+	var k := String(kind)
+	return {
+		"name": LairText.t("build_" + k),
+		"cost": cost(kind),
+		"footprint": footprint(kind),
+		"unlocked": kinds().has(kind) and (BUILD.unlocked_at_start.has(kind) or GameState.is_unlocked(StringName("build_" + k))),
+		"blurb": LairText.t("desc_" + k),
+	}
 
 
 func footprint(kind: StringName) -> Vector2:
@@ -114,6 +138,8 @@ func place(kind: StringName, at: Vector2) -> Node2D:
 	s.global_position = at
 	if kind != &"heart":
 		Events.machine_built.emit(s)
+	if kind == &"heart" and int(GameState.stats.get("built_heart", 0)) == 0:
+		_free_heart_frame = Engine.get_physics_frames()
 	GameState.count("built_" + String(kind))
 	return s
 

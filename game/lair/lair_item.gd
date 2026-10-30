@@ -25,6 +25,10 @@ const COLORS := {
 }
 
 
+## Kinds the necromancer can put in his satchel: by interacting with it, or by drawing it in with Harvest.
+const CARRYABLE := [&"stitched_body"]
+
+
 static func make(item_kind: StringName, item_data: Dictionary = {}) -> LairItem:
 	var it := LairItem.new()
 	it.kind = item_kind
@@ -38,9 +42,39 @@ static func make(item_kind: StringName, item_data: Dictionary = {}) -> LairItem:
 func _ready() -> void:
 	super()
 	add_to_group("pullable")
+	if CARRYABLE.has(kind):
+		add_to_group(&"interactable")
+		add_to_group(&"harvestable")
 	if ResourceLoader.exists("res://art/sprites/%s.tres" % kind) or ArtLib.SIZES.has(String(kind)):
 		add_child(ArtLib.make_sprite(String(kind)))
 	queue_redraw()
+
+
+## Interactable: into the satchel.
+func interact(_by: Node2D) -> void:
+	if not Lair.item_free(self):
+		return
+	if GameState.add_item(kind, 1.0) < 1.0:
+		LairText.say("satchel_full", &"concerned")
+		return
+	LairText.say("body_picked_up", &"chipper")
+	queue_free()
+
+
+func interact_hint() -> String:
+	return LairText.t("hint_body_pick_up") if Lair.item_free(self) else ""
+
+
+## Harvestable (the Necromancer's Harvest): what this yields into the satchel.
+func components() -> Dictionary:
+	return {kind: 1} if Lair.item_free(self) and CARRYABLE.has(kind) else {}
+
+
+func consume() -> Dictionary:
+	var c := components()
+	if not c.is_empty():
+		queue_free()
+	return c
 
 
 ## The Harvest spell tugs on loose items. Pixels per tick squared, for one tick.
