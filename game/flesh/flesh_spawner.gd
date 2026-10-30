@@ -115,22 +115,43 @@ static func find_footing(at: Vector2, clear_px: float = 40.0) -> Vector2:
 # ---------------------------------------------------------------- townsfolk
 
 ## One adult resident of `home` (World's home dictionary) in `town`. Farmers work fields outside town;
-## villagers potter about inside it. They start at home.
+## villagers potter about inside it. They start at home: inside the house when World gives it an
+## `interior` (pixels) and `door_inside`, else on the ground by the house.
 func spawn_resident(town: Dictionary, home: Dictionary, index: int = 0) -> Human:
 	_resident_n += 1
 	var farmer := fmod(_resident_n * SPAWN.farmer_share, 1.0) < SPAWN.farmer_share - 0.001
 	var r: Rect2 = home.rect
 	var trect: Rect2 = town.get("rect", r)
 	var x := r.get_center().x + (index - 1) * 6.0
-	var feet := find_footing(Vector2(x, r.end.y - 4.0))
-	var work := Vector2(randf_range(trect.position.x, trect.end.x), feet.y)
+	var outside := find_footing(Vector2(x, r.end.y - 4.0))
+	var door_out: Vector2 = home.get("door", Vector2.ZERO)
+	if door_out == Vector2.ZERO:
+		door_out = outside
+	var inner: Rect2 = home.get("interior", Rect2())
+	var feet := outside
+	var bed := Vector2.ZERO
+	var door_in: Vector2 = home.get("door_inside", Vector2.ZERO)
+	if inner.has_area():
+		var n := maxi(1, int(home.get("residents", home.get("alive", 1))))
+		var bx := inner.position.x + inner.size.x * float(index % n + 1) / float(n + 1)
+		bed = find_footing(Vector2(bx, inner.end.y - 4.0), 20.0)
+		if not inner.grow(8.0).has_point(bed + Vector2(0, -4)):
+			bed = Vector2(bx, inner.end.y - 1.0) # footing search left the room: stand on its floor line
+		if door_in == Vector2.ZERO:
+			door_in = Vector2(inner.position.x + 8.0, bed.y)
+		feet = bed
+	var work := Vector2(randf_range(trect.position.x, trect.end.x), door_out.y)
 	if farmer:
 		var side: int = town.get("side", 1)
 		var edge := trect.position.x if side < 0 else trect.end.x
 		var fx := edge + float(side if side != 0 else 1) * randf_range(SPAWN.field_px[0], SPAWN.field_px[1])
-		work = Vector2(fx, feet.y)
+		work = Vector2(fx, door_out.y)
 	var hu := spawn_human(&"farmer" if farmer else &"villager", feet) as Human
-	hu.set_home(int(home.id), r, feet, work)
+	if inner.has_area():
+		hu.position = feet # no footing search: they start where they sleep
+	hu.set_home(int(home.id), r, outside, work)
+	if inner.has_area():
+		hu.set_interior(inner, bed, door_in, door_out)
 	return hu
 
 

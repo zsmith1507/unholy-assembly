@@ -36,6 +36,16 @@ const HUMAN := {
 	"idle_tick_every": 8, ## standing still, physics runs only every this many ticks
 }
 
+## Living in a house with an interior (World's two-layer towns): residents sleep inside at night, come
+## out through the front door by day, and go back in at dusk or when they flee home.
+const HOUSE := {
+	"door_px": 8.0, ## this close (sideways) to a door and they go through it
+	"door_reach_y": 30.0, ## and no further than this up or down from it
+	"door_find_px": 40.0, ## a door node (group doors) this close is the one they use
+	"door_cooldown": 1.5, ## seconds before they use a door again (no flickering in and out)
+	"bed_wander_px": 14.0, ## how far they amble from their spot indoors
+}
+
 ## How likely each limb is to come off at the moment of death, by what killed them.
 const SEVER := {
 	"necro": {"arm": 0.3, "leg": 0.2, "head": 0.12}, ## the dig beam cuts
@@ -52,6 +62,11 @@ var home_pos := Vector2.ZERO
 var work_pos := Vector2.ZERO
 var route: PackedVector2Array = PackedVector2Array()
 var at_home := false
+var interior := Rect2() ## the inside of their home (pixels), when World gives houses interiors
+var door_in := Vector2.ZERO ## floor level just inside the front door
+var bed_pos := Vector2.ZERO ## their own spot indoors
+var _door_cd := 0.0
+var _bed_target := Vector2.ZERO
 var _route_i := 0
 var _route_dir := 1
 var _target := Vector2.ZERO
@@ -95,6 +110,20 @@ func set_home(id: int, rect: Rect2, feet: Vector2, work: Vector2) -> void:
 	home_rect = rect
 	home_pos = feet
 	work_pos = work
+
+
+## A resident whose home has an interior: `bed` is their spot inside, `inside_door` floor level by the door
+## inside, `outside_door` floor level by the front door outside (also their home_pos, where they run to).
+func set_interior(rect: Rect2, bed: Vector2, inside_door: Vector2, outside_door: Vector2) -> void:
+	interior = rect
+	bed_pos = bed
+	door_in = inside_door
+	home_pos = outside_door
+
+
+## True while they are inside their house's interior.
+func is_inside() -> bool:
+	return interior.has_area() and interior.grow(6.0).has_point(global_position + Vector2(0, -4))
 
 
 func _ready() -> void:
@@ -142,6 +171,7 @@ func _physics_process(delta: float) -> void:
 	if dead:
 		return
 	_attack_cd = maxf(0.0, _attack_cd - delta)
+	_door_cd = maxf(0.0, _door_cd - delta)
 	for k in _seen.keys():
 		_seen[k] -= delta
 		if _seen[k] <= 0.0:
@@ -187,8 +217,12 @@ func _physics_process(delta: float) -> void:
 			goal = route[route.size() - 1] if mode == &"home" and route.size() > 0 else home_pos
 		_:
 			goal = _work_goal()
+	goal = _house_goal(m, goal)
 	var moving := absf(goal.x - global_position.x) > 4.0
-	at_home = m == &"home" and not moving and home_rect.has_area() and home_rect.grow(8.0).has_point(global_position + Vector2(0, -4))
+	if interior.has_area():
+		at_home = m == &"home" and is_inside()
+	else:
+		at_home = m == &"home" and not moving and home_rect.has_area() and home_rect.grow(8.0).has_point(global_position + Vector2(0, -4))
 	var dir := signf(goal.x - global_position.x) if moving else 0.0
 	velocity.x = dir * speed + _drag_x
 	_drag_x *= HUMAN.drag_keep
@@ -291,6 +325,82 @@ func _work_goal() -> Vector2:
 		else:
 			return global_position
 	return _target
+
+
+## Bend a goal round the front door: someone indoors who wants to be outside walks to the door and
+## goes through, and the other way round. At night (and when fleeing home) they stay in.
+func _house_goal(m: StringName, goal: Vector2) -> Vector2:
+	if not interior.has_area():
+		return goal
+	var inside := is_inside()
+	# (a goal that is just "stay where you are" doesn't count as wanting to be indoors)
+	var goal_in := goal.distance_to(global_position) > 1.0 and interior.grow(8.0).has_point(goal + Vector2(0, -4))
+	var threat_in := _threat != null and is_instance_valid(_threat) and interior.grow(8.0).has_point(_threat.global_position + Vector2(0, -4))
+	var want_in := m == &"home" or goal_in
+	if m == &"flee":
+		want_in = (inside and not threat_in) or (not inside and goal == home_pos)
+	if inside and want_in:
+		if goal_in:
+			return goal
+		if m == &"flee":
+			return global_position # hiding indoors
+		return _bed_goal()
+	if inside:
+		if _near_door(door_in):
+			_use_door(home_pos)
+		return door_in
+	if want_in:
+		if _near_door(home_pos):
+			_use_door(door_in)
+		return home_pos
+	return goal
+
+
+func _bed_goal() -> Vector2:
+	if _bed_target == Vector2.ZERO:
+		_bed_target = bed_pos
+	if absf(_bed_target.x - global_position.x) < 4.0 and randf() < 0.004:
+		var r: float = HOUSE.bed_wander_px
+		_bed_target = Vector2(clampf(bed_pos.x + randf_range(-r, r), interior.position.x + 6.0, interior.end.x - 6.0), bed_pos.y)
+	return _bed_target
+
+
+func _near_door(at: Vector2) -> bool:
+	return at != Vector2.ZERO and absf(at.x - global_position.x) <= HOUSE.door_px and absf(at.y - global_position.y) <= HOUSE.door_reach_y
+
+
+## Go through the door they stand at: World's door node moves them (door.interact); if there is none, or
+## it did not, step straight to `to`.
+func _use_door(to: Vector2) -> void:
+	if _door_cd > 0.0:
+		return
+	_door_cd = HOUSE.door_cooldown
+	var before := global_position
+	var door := _door_at(global_position)
+	if door != null:
+		door.interact(self)
+	if global_position.distance_to(before) < 4.0:
+		global_position = to
+	velocity = Vector2.ZERO
+	_drag_x = 0.0
+	_has_target = false
+	_stuck = 0.0
+	_idle_ticks = HUMAN.idle_tick_every
+
+
+func _door_at(at: Vector2) -> Node:
+	if not is_inside_tree():
+		return null
+	var best: Node = null
+	var best_d: float = HOUSE.door_find_px
+	for d in get_tree().get_nodes_in_group(&"doors"):
+		if not (d is Node2D) or not d.has_method("interact"):
+			continue
+		var dd: float = (d as Node2D).global_position.distance_to(at)
+		if dd < best_d:
+			best = d
+			best_d = dd
+	return best
 
 
 func _give_up() -> void:
