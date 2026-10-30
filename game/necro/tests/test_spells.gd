@@ -11,9 +11,9 @@ func run(t) -> void:
 
 	# --- spell list hook
 	var list := n.get_spells()
-	t.check(list.size() == 6, "six spells in the list")
+	t.check(list.size() == 5, "five spells in the list (Build moved to the build menu)")
 	var ids := list.map(func(s): return s.id)
-	t.check(ids == [&"dig", &"harvest", &"siphon", &"build", &"command_dig", &"stockpile"], "spell order: %s" % [ids])
+	t.check(ids == [&"dig", &"harvest", &"siphon", &"command_dig", &"stockpile"], "spell order: %s" % [ids])
 	t.check(list[0].has("name") and list[0].has("cost_text") and list[0].has("color"), "entries have name, cost_text, color")
 	var got := []
 	var on_sel := func(id): got.append(id)
@@ -41,7 +41,7 @@ func run(t) -> void:
 	var after := U.count_solid(probe)
 	t.check(after < before - 100, "dig removes ground (%d -> %d cells)" % [before, after])
 	var spent := mana0 - GameState.mana
-	t.check(absf(spent - 0.1) < 0.01, "dig spends 0.1 souls' worth per second (spent %.3f)" % spent)
+	t.check(absf(spent - 0.04) < 0.005, "dig spends 0.04 souls' worth per second at the start (spent %.3f)" % spent)
 	t.check(noise[0] > 0, "dig makes noise")
 	t.check(casts == [&"dig"], "one Events.spell_cast per channel (%s)" % [casts])
 	Events.spell_cast.disconnect(on_cast)

@@ -5,10 +5,14 @@ extends NecroSpell
 ## Grinding is loud: it reports noise for the Threats department to turn into Suspicion.
 
 ## Tuning. Cells are 2 px. Hardness per material lives in the sim (packed earth 1.2, stone 6, ...).
+## Round 5 (Zach's note 4): it starts slow, narrow and cheap, and the talents make it better
+## (Hungry Earth: power, Thrifty Grave-Wind: cost, Wide Bore: radius; see necro/talents.gd FX).
+## Was cost 0.1, power 0.17, radius 32 (a 64 px bore in one pass).
 const DIG := {
-	"cost": 0.1, # souls' worth of mana per second of channelling (about ten seconds on a full bar)
-	"power": 0.17, # wear per tick at the beam's heart (packed earth goes in ~7 ticks, stone in ~35)
-	"radius_px": 32.0, # carves a 64 px wide bore: a tunnel the necromancer can walk through
+	"cost": 0.04, # souls' worth of mana per second of channelling (25 seconds on a full one-soul bar)
+	"power": 0.07, # wear per tick at the beam's heart (packed earth goes in ~17 ticks, stone in ~85)
+	"radius_px": 20.0, # a 40 px bore: sweep up and down to open a tunnel he can walk through (he is 58 px tall)
+	"min_cost_mult": 0.25, # talents never bring the cost below a quarter
 	"range_px": 116.0, # how far the beam reaches from his hand
 	"noise_every": 20, # ticks between noise reports while grinding
 	"noise_per_cell": 0.02, # loudness per cell removed in that window (stone counts 3x)
@@ -44,7 +48,25 @@ func _init() -> void:
 
 
 func cost_text() -> String:
-	return NecroText.t("necro_cost_per_s", "{c} souls/s", {"c": "%.2f" % DIG.cost})
+	return NecroText.t("necro_cost_per_s", "{c} souls/s", {"c": "%.2f" % cost_per_s()})
+
+
+func _talent(id: StringName, key: String) -> float:
+	var tl = necro.get_talents() if necro != null and necro.has_method("get_talents") else null
+	return tl.effect(id, key) if tl != null else 0.0
+
+
+## Current numbers with the talents applied.
+func cost_per_s() -> float:
+	return DIG.cost * maxf(DIG.min_cost_mult, 1.0 + _talent(&"dig_efficiency", "cost"))
+
+
+func power() -> float:
+	return DIG.power * (1.0 + _talent(&"dig_speed", "power"))
+
+
+func radius_px() -> float:
+	return DIG.radius_px + _talent(&"dig_radius", "radius_px")
 
 
 func on_deselect() -> void:
@@ -58,7 +80,7 @@ func tick(aim: Vector2, held: bool, _pressed: bool, _released: bool) -> void:
 	_beam_on = false
 	if not held:
 		return
-	if not GameState.spend_mana(DIG.cost / 60.0):
+	if not GameState.spend_mana(cost_per_s() / 60.0):
 		necro.warn_no_mana()
 		return
 	channelling = true
@@ -92,7 +114,7 @@ func tick(aim: Vector2, held: bool, _pressed: bool, _released: bool) -> void:
 			_sparks(beam_to, dir, TEAL, 1, true)
 		return
 	beam_hit = true
-	var removed := Sim.dig_px(beam_to, DIG.radius_px, DIG.power)
+	var removed := Sim.dig_px(beam_to, radius_px(), power())
 	_after_dig(removed, beam_to, dir)
 
 

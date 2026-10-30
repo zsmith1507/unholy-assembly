@@ -1,7 +1,9 @@
 extends NecroSpell
-## Build: raise a lair structure where he points. A ghost of the structure follows the aim, green where
-## the Lair department says it fits and red where it doesn't. Cast places it and pays its cost; the
-## alternate button cycles what to build. With a gamepad the ghost snaps to a grid.
+## Build placement: raise a lair structure where he points. Since round 5 (Zach's note 6) this is not on
+## the spell bar: Eyegor's build menu calls necro.begin_placement(kind), and the necromancer runs this
+## tool until the player places (cast) or cancels (cast_alt or Esc). A ghost of the structure follows the
+## aim, green where the Lair department says it fits and red where it doesn't. With a gamepad the ghost
+## snaps to a grid. Costs may include satchel items (flesh, bones, blood) as well as mana and souls.
 ##
 ## Uses the Lair builder hook: the node in group "lair_builder" with kinds(), can_place(kind, at),
 ## place(kind, at) -> Node2D, cost(kind) -> {"mana": x, "souls": y}. `at` is the structure's feet:
@@ -19,6 +21,7 @@ const BUILD := {
 }
 
 var kind_index := 0
+var fixed_kind: StringName = &"" ## set by begin_placement: the one kind the menu picked
 var ghost_at := Vector2.ZERO
 var ghost_ok := false
 var ghost_reason := ""
@@ -58,6 +61,8 @@ func available_kinds() -> Array:
 
 
 func current_kind() -> StringName:
+	if fixed_kind != &"":
+		return fixed_kind
 	var ks := available_kinds()
 	if ks.is_empty():
 		return &""
@@ -93,6 +98,9 @@ func _cost(k: StringName) -> Dictionary:
 func _cost_string(k: StringName) -> String:
 	var c := _cost(k)
 	var parts := []
+	var items := _item_cost(c)
+	for ik in items:
+		parts.append("%s %s" % [str(int(items[ik])), NecroText.t("item_" + String(ik), String(ik))])
 	if c.get("mana", 0.0) > 0.0:
 		parts.append(NecroText.t("necro_cost_mana", "{c} mana", {"c": "%.2f" % c.mana}))
 	if c.get("souls", 0.0) > 0.0:
@@ -162,7 +170,19 @@ func _check(k: StringName, at: Vector2) -> bool:
 	if GameState.souls + 0.0001 < float(c.get("souls", 0.0)):
 		ghost_reason = NecroText.t("necro_build_need_souls", "not enough souls")
 		return false
+	if not GameState.has_items(_item_cost(c)):
+		ghost_reason = NecroText.t("necro_build_need_items", "not enough in the satchel")
+		return false
 	return true
+
+
+## The satchel part of a cost: everything but mana and souls.
+static func _item_cost(c: Dictionary) -> Dictionary:
+	var out := {}
+	for k in c:
+		if String(k) != "mana" and String(k) != "souls" and float(c[k]) > 0.0:
+			out[StringName(k)] = float(c[k])
+	return out
 
 
 ## Place a structure through the builder and pay for it. Returns the new node or null.
@@ -180,6 +200,7 @@ func try_place(k: StringName, at: Vector2) -> Node2D:
 		GameState.spend_mana(float(c.mana))
 	if float(c.get("souls", 0.0)) > 0.0:
 		GameState.spend_souls(float(c.souls))
+	GameState.take_items(_item_cost(c))
 	last_placed = node
 	Events.spell_cast.emit(id, at)
 	for i in 14:
@@ -191,7 +212,7 @@ func try_place(k: StringName, at: Vector2) -> Node2D:
 
 func _draw() -> void:
 	super._draw()
-	if not _show or necro == null or necro.get_selected_spell() != id:
+	if not _show or necro == null or not necro.placing:
 		return
 	var k := current_kind()
 	if k == &"":

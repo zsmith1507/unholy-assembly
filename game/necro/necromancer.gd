@@ -6,6 +6,9 @@ extends Actor
 ##
 ## Hooks he provides (docs/ARCHITECTURE.md): get_spells(), get_selected_spell(), get_interact_hint(),
 ## get_levitation() for the HUD, and Events.spell_selected / Events.spell_cast.
+## Round 5: begin_placement(kind) / cancel_placement() for Eyegor's build menu (Build is no longer a
+## spell), a knife on `attack` (no mana), doors entered with up or interact, and the talent and skill
+## trees (the child node "Talents", group "talents"; see talents.gd).
 
 const SpellDig := preload("res://necro/spells/dig.gd")
 const SpellHarvest := preload("res://necro/spells/harvest.gd")
@@ -13,6 +16,7 @@ const SpellSiphon := preload("res://necro/spells/siphon.gd")
 const SpellBuild := preload("res://necro/spells/build.gd")
 const SpellCommandDig := preload("res://necro/spells/command_dig.gd")
 const SpellStockpile := preload("res://necro/spells/stockpile.gd")
+const TalentsScript := preload("res://necro/talents.gd")
 
 ## Movement tuning. Pixels and ticks (60 a second). Ported from the proving ground, scaled to a 64 px body.
 const MOVE := {
@@ -59,6 +63,25 @@ const AIM := {
 ## Interacting with the heart, the altar and other lair pieces.
 const INTERACT := {
 	"radius": 24.0, # pixels from his body to the thing's edge
+	"door_radius": 14.0, # pressing up only goes through a door this close (otherwise up is a jump)
+}
+
+## The starting knife: a quick stab in the aim direction. No mana. Talent "knife_edge" raises the damage.
+const KNIFE := {
+	"damage": 10.0, # per stab (a villager has 30 hp, a farmer 40, a rabbit 6)
+	"reach_px": 22.0, # from his hand along the aim
+	"width_px": 10.0, # how wide the stab is (forgiving aim)
+	"cooldown_ticks": 24, # 2.5 stabs a second at most
+	"stab_ticks": 9, # length of the stab animation (a lunge and a blade flash until Art has frames)
+	"lunge_px": 4.0, # the sprite leans this far into the stab
+	"noise": 0.05, # loudness of a stab (a ghoul at work is 0.08)
+	"noise_every": 60, # ticks between noise reports while stabbing
+	"blood": 3, # blood cells spilled on a hit
+}
+
+## Build placement from the build menu.
+const PLACE := {
+	"keep_after_place": false, # true: stay in placement after placing (Satisfactory style) until cancelled
 }
 
 const MANA_WARN_EVERY := 300 ## ticks between "out of mana" nags
@@ -66,6 +89,11 @@ const MANA_WARN_EVERY := 300 ## ticks between "out of mana" nags
 ## Order of the spell list (spell_1 .. spell_6).
 var spells: Array = []
 var selected := 0
+var placement: NecroSpell = null ## the build placement tool (not on the spell bar)
+var placing := false ## true while a build ghost follows the aim
+var talents: Node = null ## the talent and skill trees (group "talents")
+var stab_ticks := 0 ## counts down through a stab
+var knife_hits := 0 ## tests read this
 var gamepad_aim := false ## true when the right stick was the last thing used to aim
 
 ## Tests and demo drivers fill this to play him without real input:
@@ -91,6 +119,16 @@ var _aim_dir := Vector2.RIGHT
 var _mana_warned := -MANA_WARN_EVERY
 var _ticks := 0
 var _last_mouse := Vector2.INF
+var _was_attack := false
+var _was_up := false
+var _jump_block := false ## up went through a door: don't also jump until jump is let go
+var _knife_ready := 0 ## tick when the knife can stab again
+var _knife_noise := -1000
+var _stab_dir := Vector2.RIGHT
+var _stab_hit := false
+var _place_armed := false ## cast must be let go once after placement starts (the menu click)
+var _place_legacy := false ## entered through select_spell_id(&"build"): keeps cycling, never ends by itself
+var _placed_any := false
 
 
 func _init() -> void:
@@ -110,11 +148,17 @@ func _ready() -> void:
 	_sprite = ArtLib.make_sprite("necromancer")
 	_sprite.name = "Sprite"
 	add_child(_sprite)
-	for script in [SpellDig, SpellHarvest, SpellSiphon, SpellBuild, SpellCommandDig, SpellStockpile]:
+	talents = TalentsScript.new()
+	add_child(talents)
+	for script in [SpellDig, SpellHarvest, SpellSiphon, SpellCommandDig, SpellStockpile]:
 		var s: NecroSpell = script.new()
 		add_child(s)
 		s.setup(self)
 		spells.append(s)
+	placement = SpellBuild.new()
+	placement.name = "Placement"
+	add_child(placement)
+	placement.setup(self)
 	aim = global_position + Vector2(60, -30)
 	_attach_light.call_deferred()
 	spells[selected].on_select()
@@ -154,15 +198,22 @@ func get_selected_spell() -> StringName:
 	return spells[selected].id
 
 
+## The selected spell, or the placement tool while a build ghost is showing.
 func get_selected() -> NecroSpell:
-	return spells[selected]
+	return placement if placing else spells[selected]
 
 
 func get_spell(spell_id: StringName) -> NecroSpell:
+	if spell_id == &"build":
+		return placement
 	for s in spells:
 		if s.id == spell_id:
 			return s
 	return null
+
+
+func get_talents() -> Node:
+	return talents
 
 
 ## Levitation meter 0..1, for a HUD bar.
@@ -171,6 +222,8 @@ func get_levitation() -> float:
 
 
 func select_spell(index: int) -> void:
+	if placing:
+		cancel_placement()
 	index = posmod(index, spells.size())
 	if index == selected:
 		return
@@ -181,24 +234,125 @@ func select_spell(index: int) -> void:
 
 
 func select_spell_id(spell_id: StringName) -> void:
+	if spell_id == &"build":
+		# old drivers (the hidden-start playthrough) still pick Build like a spell: placement that cycles
+		begin_placement(&"")
+		return
 	for i in spells.size():
 		if spells[i].id == spell_id:
 			select_spell(i)
 			return
 
 
+# ---------------------------------------------------------------- build placement (Eyegor's menu calls these)
+
+## Show the ghost of `kind` on the aim; cast places it, cast_alt or Esc cancels. Returns false if that
+## kind can't be built now (no builder, a second heart). kind &"" cycles kinds with build_menu (fallback).
+func begin_placement(kind: StringName) -> bool:
+	if placement == null:
+		return false
+	if kind != &"" and not placement.available_kinds().has(kind):
+		return false
+	if placing:
+		_end_placement(false)
+	spells[selected].on_deselect()
+	casting = false
+	placing = true
+	_place_legacy = kind == &""
+	_placed_any = false
+	_place_armed = false
+	placement.fixed_kind = kind
+	if kind == &"":
+		placement.kind_index = 0
+	placement.on_select()
+	Events.build_placement_started.emit(placement.current_kind())
+	return true
+
+
+func cancel_placement() -> void:
+	if placing:
+		_end_placement(_placed_any)
+
+
+func get_placement_kind() -> StringName:
+	return placement.current_kind() if placing else &""
+
+
+func _end_placement(placed: bool) -> void:
+	var k: StringName = placement.current_kind()
+	placing = false
+	_place_legacy = false
+	placement.fixed_kind = &""
+	placement.on_deselect()
+	spells[selected].on_select()
+	Events.build_placement_ended.emit(k, placed)
+
+
+func _tick_placement(aim_at: Vector2, cast: bool, alt: bool) -> void:
+	if not cast:
+		_place_armed = true
+	var live := cast and _place_armed
+	if alt and not _was_alt:
+		if _place_legacy:
+			placement.alt_pressed() # old behaviour for old drivers: right-click cycles
+		else:
+			cancel_placement()
+			return
+	var before: Node2D = placement.last_placed
+	placement.tick(aim_at, live, live and not _was_cast, (not cast) and _was_cast)
+	if placement.last_placed != before and placement.last_placed != null:
+		_placed_any = true
+		var gone: bool = placement.fixed_kind != &"" and not placement.available_kinds().has(placement.fixed_kind)
+		if not _place_legacy and (gone or not PLACE.keep_after_place):
+			_end_placement(true)
+
+
+## No build menu yet (Eyegor's lands in round 5): the build_menu key starts placement and cycles kinds.
+func _build_menu_fallback() -> void:
+	if get_tree().get_first_node_in_group("build_menu") != null:
+		return
+	if not placing:
+		begin_placement(&"")
+	else:
+		placement.alt_pressed()
+		Events.build_placement_started.emit(placement.current_kind())
+
+
+# ---------------------------------------------------------------- interact and doors
+
 ## What pressing interact would do right now, or "" when nothing is in reach.
 func get_interact_hint() -> String:
 	var n := nearest_interactable()
 	if n == null:
 		return ""
-	return n.interact_hint() if n.has_method("interact_hint") else ""
+	if n.has_method("interact_hint"):
+		return n.interact_hint()
+	if n.has_method("get_interact_hint"):
+		return n.get_interact_hint()
+	if n.is_in_group("doors"):
+		return NecroText.t("necro_door_hint", "E / Up: go through the door")
+	return ""
 
 
 func nearest_interactable() -> Node2D:
 	var best: Node2D = null
 	var best_d := INTERACT.radius
-	for n in get_tree().get_nodes_in_group("interactable"):
+	for g in ["interactable", "doors"]:
+		for n in get_tree().get_nodes_in_group(g):
+			if not (n is Node2D) or not n.has_method("interact"):
+				continue
+			var d := _distance_to_thing(n)
+			if d <= best_d:
+				best_d = d
+				best = n
+	return best
+
+
+## The door he is standing at, close enough that pressing up means "go in".
+func door_in_reach() -> Node2D:
+	var best: Node2D = null
+	var best_d: float = INTERACT.door_radius
+	for n in get_tree().get_nodes_in_group("doors"):
 		if not (n is Node2D) or not n.has_method("interact"):
 			continue
 		var d := _distance_to_thing(n)
@@ -250,6 +404,7 @@ func _input_state() -> Dictionary:
 			"cast": script_input.get("cast", false),
 			"cast_alt": script_input.get("cast_alt", false),
 			"interact": script_input.get("interact", false),
+			"attack": script_input.get("attack", false),
 		}
 	return {
 		"move": Input.get_vector("move_left", "move_right", "move_up", "move_down"),
@@ -257,6 +412,7 @@ func _input_state() -> Dictionary:
 		"cast": Input.is_action_pressed("cast"),
 		"cast_alt": Input.is_action_pressed("cast_alt"),
 		"interact": Input.is_action_pressed("interact"),
+		"attack": Input.is_action_pressed("attack"),
 	}
 
 
@@ -285,6 +441,13 @@ func _update_aim() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if scripted:
 		return
+	if event.is_action_pressed("build_menu"):
+		_build_menu_fallback()
+		return
+	if placing and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause")):
+		cancel_placement()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("spell_next"):
 		select_spell(selected + 1)
 	elif event.is_action_pressed("spell_prev"):
@@ -304,21 +467,46 @@ func _physics_process(_delta: float) -> void:
 	_ticks += 1
 	var inp := _input_state()
 	_update_aim()
+	# up at a door goes through it (and isn't also a jump: W is both)
+	var up: bool = (inp.move as Vector2).y < -0.5
+	if up and not _was_up and on_floor:
+		var door := door_in_reach()
+		if door != null:
+			_jump_block = true
+			door.interact(self)
+	_was_up = up
+	if _jump_block:
+		if inp.jump:
+			inp.jump = false
+		else:
+			_jump_block = false
 	_move(inp)
 	_unbury()
 
-	# spells
+	# spells, or the build ghost while placing
 	var cast: bool = inp.cast
 	var alt: bool = inp.cast_alt
-	var spell: NecroSpell = spells[selected]
-	if alt and not _was_alt:
-		spell.alt_pressed()
-	spell.tick(aim, cast, cast and not _was_cast, (not cast) and _was_cast)
-	if spell.channelling and not casting and spell.announce_channel:
-		Events.spell_cast.emit(spell.id, aim)
-	casting = spell.channelling
+	if placing:
+		_tick_placement(aim, cast, alt)
+		casting = false
+	else:
+		var spell: NecroSpell = spells[selected]
+		if alt and not _was_alt:
+			spell.alt_pressed()
+		spell.tick(aim, cast, cast and not _was_cast, (not cast) and _was_cast)
+		if spell.channelling and not casting and spell.announce_channel:
+			Events.spell_cast.emit(spell.id, aim)
+		casting = spell.channelling
 	_was_cast = cast
 	_was_alt = alt
+
+	# the knife
+	var atk: bool = inp.attack
+	if atk and not _was_attack:
+		stab()
+	_was_attack = atk
+	if stab_ticks > 0:
+		stab_ticks -= 1
 
 	# interact
 	var inter: bool = inp.interact
@@ -384,6 +572,10 @@ func _unbury() -> void:
 
 func _update_facing(inp: Dictionary) -> void:
 	var move: Vector2 = inp.move
+	if stab_ticks > 0:
+		if absf(_stab_dir.x) > 0.1:
+			facing = 1 if _stab_dir.x > 0 else -1
+		return
 	if casting or (not gamepad_aim and not scripted):
 		var dx := aim.x - global_position.x
 		if absf(dx) > 2.0:
@@ -396,7 +588,9 @@ func _update_facing(inp: Dictionary) -> void:
 
 func _update_anim() -> void:
 	var a: StringName
-	if submerged >= SWIM.wet:
+	if stab_ticks > 0:
+		a = &"attack"
+	elif submerged >= SWIM.wet:
 		a = &"swim"
 	elif casting:
 		a = &"cast"
@@ -418,7 +612,67 @@ func _update_anim() -> void:
 		bob = -absf(sin(_ticks * 0.25)) * 2.0
 	elif a == &"swim":
 		bob = sin(_ticks * 0.12) * 1.5
-	_sprite.position = Vector2(0, bob)
+	var lean := Vector2.ZERO
+	if stab_ticks > 0:
+		# placeholder stab: lean in fast, ease back out
+		var k := float(stab_ticks) / float(KNIFE.stab_ticks)
+		lean = Vector2(_stab_dir.x, _stab_dir.y * 0.5) * KNIFE.lunge_px * sin(k * PI)
+	_sprite.position = Vector2(0, bob) + lean
+
+
+# ---------------------------------------------------------------- the knife
+
+## Stab along the aim (or straight ahead). Costs no mana. Returns the actor hit, or null.
+func stab() -> Actor:
+	if _ticks < _knife_ready or dead:
+		return null
+	_knife_ready = _ticks + int(KNIFE.cooldown_ticks)
+	stab_ticks = int(KNIFE.stab_ticks)
+	var hand := get_hand_pos()
+	var dir := _aim_dir
+	if gamepad_aim and Input.get_vector("aim_left", "aim_right", "aim_up", "aim_down").length() < 0.2:
+		dir = Vector2(facing, 0)
+	if dir.length() < 0.01:
+		dir = Vector2(facing, 0)
+	_stab_dir = dir.normalized()
+	if absf(_stab_dir.x) > 0.1:
+		facing = 1 if _stab_dir.x > 0 else -1
+		hand = get_hand_pos()
+	var tip := hand + _stab_dir * KNIFE.reach_px
+	if _ticks - _knife_noise >= int(KNIFE.noise_every):
+		_knife_noise = _ticks
+		Events.noise_made.emit(hand, KNIFE.noise, "knife")
+	var victim := _knife_victim(hand, tip)
+	_stab_hit = victim != null
+	if victim == null:
+		return null
+	var dmg: float = KNIFE.damage
+	if talents != null:
+		dmg *= 1.0 + talents.effect(&"knife_edge", "damage")
+	knife_hits += 1
+	var at: Vector2 = victim.get_box().get_center()
+	if Sim.world != null and KNIFE.blood > 0:
+		Sim.spill_px(at, SandWorld.M_BLOOD, int(KNIFE.blood), _stab_dir * 1.5 + Vector2(0, -0.8))
+	victim.take_damage(dmg, self)
+	return victim
+
+
+func _knife_victim(a: Vector2, b: Vector2) -> Actor:
+	var best: Actor = null
+	var best_d := INF
+	for n in get_tree().get_nodes_in_group("actors"):
+		if not (n is Actor) or n == self or n.dead or not n.is_living():
+			continue
+		var box: Rect2 = n.get_box()
+		var ab := b - a
+		var t := clampf((box.get_center() - a).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
+		var p := a + ab * t
+		if box.grow(KNIFE.width_px * 0.5).has_point(p):
+			var d := a.distance_to(p)
+			if d < best_d:
+				best_d = d
+				best = n
+	return best
 
 
 ## Called by spells when the bar is empty. Eyegor nags, but not every tick.
@@ -444,6 +698,16 @@ func _draw() -> void:
 	var hand := Vector2(AIM.hand.x * facing, AIM.hand.y)
 	var pulse := 0.6 + 0.4 * sin(_ticks * 0.15)
 	draw_circle(hand, 2.5 if casting else 1.5, Color(0.6, 1.0, 0.9, 0.9 * pulse))
+	if stab_ticks > 0:
+		# the knife: a short pale blade thrust out along the stab, with a red glint on a hit
+		var k := float(stab_ticks) / float(KNIFE.stab_ticks)
+		var out := sin(k * PI)
+		var base := hand + _stab_dir * 3.0
+		var tip := hand + _stab_dir * (6.0 + KNIFE.reach_px * out)
+		draw_line(base, tip, Color(0.82, 0.84, 0.9, 0.95), 1.5)
+		draw_line(hand - _stab_dir * 2.0, base, Color(0.3, 0.2, 0.15), 2.5)
+		if _stab_hit:
+			draw_circle(tip, 2.0 * out, Color(0.8, 0.1, 0.12, 0.9))
 	# levitation meter: a thin bar under his feet, only while it is not full
 	if levitation < 0.999:
 		draw_rect(Rect2(-8, 3, 16, 2), Color(0.1, 0.1, 0.12, 0.7))
