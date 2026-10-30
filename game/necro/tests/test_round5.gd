@@ -6,22 +6,7 @@ const U := preload("res://necro/tests/necro_test_util.gd")
 const StandInBuilder := preload("res://necro/demo/stand_in_builder.gd")
 
 
-## A body in group "harvestable" (Bodies' Components hook) that the wind can pull.
-class StandInBody extends Item:
-	var yields := {&"flesh": 2.0, &"bones": 1.0, &"blood": 1.0}
-	var consumed := 0
-	func _ready() -> void:
-		super._ready()
-		add_to_group("harvestable")
-		add_to_group("pullable")
-	func components() -> Dictionary:
-		return yields.duplicate()
-	func consume() -> Dictionary:
-		consumed += 1
-		var y := yields.duplicate()
-		yields = {}
-		queue_free()
-		return y
+const StandInBody := preload("res://necro/demo/stand_in_body.gd")
 
 
 class StandInHuman extends Actor:
